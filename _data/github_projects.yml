@@ -1,0 +1,25 @@
+tree-of-life:
+    title: Tree of Life
+    img: tree-of-life.png
+    app: true
+    description: |
+        An interactive visualization of the Open Tree of Life using d3.js.
+        The entire tree with approximately 2.3 million identified species as
+        leaf nodes is browsable through the application. The width of the
+        branches in the visualization represents the number of species
+        they contain.
+black-hole:
+    title: Black Hole
+    img: black-hole.jpg
+    app: true
+    description: |
+        A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
+        The contributions of various special and general relativistic effects can be toggled from the GUI.
+        Needs a decent GPU and recent variant of Chrome or Firefox to run smoothly.
+raytracer:
+    title: OpenCL Raytracer
+    img: raytracer.jpg
+tupas-test:
+    app: true
+    title: Test page for TUPAS
+    img: tupas-test.png

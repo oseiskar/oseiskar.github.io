@@ -1,0 +1,31 @@
+body {
+    margin-top: 3%;
+    margin-left: 2%;
+    margin-right: 2%;
+}
+
+.image-block {
+    display: block;
+    height: 200px;
+    background-position: center;
+    border-radius: 20px;
+}
+
+.description-block {
+    padding-left: 4%;
+}
+
+.project-row {
+    margin-top: 5%;
+}
+
+i.link-icon {
+    vertical-align: middle;
+}
+
+p { margin-bottom: 0; }
+
+a.project-link  {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+}

@@ -1,0 +1,47 @@
+---
+---
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>oseiskar's Github apps</title>
+    <meta name="description" content="{{ site.description }}">
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="css/index.css">
+    <link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
+</head>
+<body>
+    {% for project in site.data.github_projects %}
+        {% assign name = project[0] %}
+        {% assign details = project[1] %}
+
+        {% capture app_url %}https://oseiskar.github.io/{{ name }}{% endcapture %}
+        {% capture src_url %}https://github.com/oseiskar/{{ name }}{% endcapture %}
+
+        {% if details.app %}
+            {% assign main_url = app_url %}
+        {% else %}
+            {% assign main_url = src_url %}
+        {% endif %}
+        <div class="row project-row">
+            <div class='col-xs-5 col-lg-3 col-lg-offset-2'>
+                <a href="{{ main_url }}" class="image-block" style="background-image: url('img/{{details.img}}')">
+                </a>
+            </div>
+            <div class='col-xs-7 col-lg-4 description-block'>
+                <h2>{{ details.title }}</h2>
+                <p>{{ details.description }}</p>
+                <ul class="project-links nav nav-pills pull-right">
+                    {% if details.app %}
+                    <li><a href="{{app_url}}" class="project-link">App</a></li>
+                    {% endif %}
+                    <li><a href="{{src_url}}" class="project-link"><i class="fa fa-github fa-lg link-icon"></i> Source</a></li>
+                </ul>
+            </div>
+        </div>
+    {% endfor %}
+</body>
+</html>
