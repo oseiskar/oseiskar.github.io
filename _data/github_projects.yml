@@ -16,10 +16,3 @@ black-hole:
         A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
         The contributions of various special and general relativistic effects can be toggled from the GUI.
         Needs a decent GPU and recent variant of Chrome or Firefox to run smoothly.
-raytracer:
-    title: OpenCL Raytracer
-    img: raytracer.jpg
-tupas-test:
-    app: true
-    title: Test page for TUPAS
-    img: tupas-test.png
