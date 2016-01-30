@@ -1,7 +1,8 @@
 body {
-    margin-top: 3%;
+    margin-top: 1%;
     margin-left: 2%;
     margin-right: 2%;
+    margin-bottom: 3%;
 }
 
 .image-block {
@@ -9,6 +10,14 @@ body {
     height: 200px;
     background-position: center;
     border-radius: 20px;
+    border: 1px dashed #cccccc;
+}
+
+@media (max-width: 600px) {
+    .image-block {
+        height: 150px;
+        margin-top: 20%;
+    }
 }
 
 .description-block {
@@ -16,7 +25,8 @@ body {
 }
 
 .project-row {
-    margin-top: 5%;
+    margin-top: 3%;
+    overflow: hidden;
 }
 
 i.link-icon {
@@ -36,4 +46,8 @@ p {
 a.project-link  {
     padding-top: 5px !important;
     padding-bottom: 5px !important;
+}
+
+.container {
+    width: 100%;
 }

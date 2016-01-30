@@ -15,4 +15,18 @@ black-hole:
     description: |
         A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
         The contributions of various special and general relativistic effects can be toggled from the GUI.
-        Needs a decent GPU and recent variant of Chrome or Firefox to run smoothly.
+        Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly.
+stash-js:
+    title: stash.js
+    img: stash-js.png
+    app: true
+    description: |
+        A no-backend geocaching puzzle HTML app. Open with a mobile device
+        for a reasonable user experience.
+tupas-test:
+    title: TUPAS test
+    img: tupas-test.png
+    app: true
+    description: |
+        Test page for TUPAS, a method used by Finnish banks to
+        provide strong authentication services to other websites.

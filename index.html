@@ -14,6 +14,7 @@
     <link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
 </head>
 <body>
+    <div class="container">
     {% for project in site.data.github_projects %}
         {% assign name = project[0] %}
         {% assign details = project[1] %}
@@ -43,5 +44,6 @@
             </div>
         </div>
     {% endfor %}
+    </div>
 </body>
 </html>
