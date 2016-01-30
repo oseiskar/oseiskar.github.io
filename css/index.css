@@ -23,7 +23,15 @@ i.link-icon {
     vertical-align: middle;
 }
 
-p { margin-bottom: 0; }
+a.title-link {
+    color: black;
+    text-decoration: none;
+}
+
+p {
+    margin-bottom: 0;
+    color: black;
+}
 
 a.project-link  {
     padding-top: 5px !important;
