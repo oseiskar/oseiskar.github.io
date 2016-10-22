@@ -18,7 +18,7 @@ black-hole:
         Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly.
 raytracer:
     title: Raytracer
-    img: raytracer.jpg
+    img: raytracer.png
     gallery: http://oseiskar.tumblr.com/search/%23opencl-raytracer
     description: |
         An OpenCL-accelerated raytracer written in Python. Uses path tracing
