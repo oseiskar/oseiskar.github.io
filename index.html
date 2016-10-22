@@ -5,7 +5,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>oseiskar's Github apps</title>
+    <title>oseiskar's Github stuff</title>
     <meta name="description" content="{{ site.description }}">
 
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
@@ -38,6 +38,9 @@
                 <ul class="project-links nav nav-pills pull-right">
                     {% if details.app %}
                     <li><a href="{{app_url}}" class="project-link">App</a></li>
+                    {% endif %}
+                    {% if details.gallery %}
+                    <li><a href="{{details.gallery}}" class="project-link">Gallery</a></li>
                     {% endif %}
                     <li><a href="{{src_url}}" class="project-link"><i class="fa fa-github fa-lg link-icon"></i> Source</a></li>
                 </ul>

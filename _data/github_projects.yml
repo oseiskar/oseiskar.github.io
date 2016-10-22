@@ -16,6 +16,14 @@ black-hole:
         A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
         The contributions of various special and general relativistic effects can be toggled from the GUI.
         Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly.
+raytracer:
+    title: Raytracer
+    img: raytracer.jpg
+    gallery: http://oseiskar.tumblr.com/search/%23opencl-raytracer
+    description: |
+        An OpenCL-accelerated raytracer written in Python. Uses path tracing
+        and supports advanced physics-based lighting effects such as dispersion
+        and sub-surface scattering.
 stash-js:
     title: stash.js
     img: stash-js.png
