@@ -19,11 +19,21 @@ black-hole:
 raytracer:
     title: Raytracer
     img: raytracer.png
-    gallery: http://oseiskar.tumblr.com/search/%23opencl-raytracer
+    link:
+        name: Gallery
+        url: http://oseiskar.tumblr.com/search/%23opencl-raytracer
     description: |
         An OpenCL-accelerated raytracer written in Python. Uses path tracing
         and supports advanced physics-based lighting effects such as dispersion
         and sub-surface scattering.
+BaroFloorHeight:
+    title: Baro floor height
+    img: baro-floor-height.png
+    link:
+        name: Android app
+        url: https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en
+    description: |
+        An Andoid app for measuring the height of storeys and buildings using the barometer.
 stash-js:
     title: stash.js
     img: stash-js.png

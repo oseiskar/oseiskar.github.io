@@ -24,8 +24,10 @@
 
         {% if details.app %}
             {% assign main_url = app_url %}
+            {% assign main_link_text = "App" %}
         {% else %}
-            {% assign main_url = src_url %}
+            {% assign main_url = details.link.url %}
+            {% assign main_link_text = details.link.name %}
         {% endif %}
         <div class="row project-row">
             <div class='col-xs-5 col-lg-3 col-lg-offset-2'>
@@ -36,12 +38,7 @@
                 <h2><a class="title-link" href="{{main_url}}">{{ details.title }}</a></h2>
                 <p>{{ details.description }}</p>
                 <ul class="project-links nav nav-pills pull-right">
-                    {% if details.app %}
-                    <li><a href="{{app_url}}" class="project-link">App</a></li>
-                    {% endif %}
-                    {% if details.gallery %}
-                    <li><a href="{{details.gallery}}" class="project-link">Gallery</a></li>
-                    {% endif %}
+                    <li><a href="{{main_url}}" class="project-link">{{ main_link_text }}</a></li>
                     <li><a href="{{src_url}}" class="project-link"><i class="fa fa-github fa-lg link-icon"></i> Source</a></li>
                 </ul>
             </div>
