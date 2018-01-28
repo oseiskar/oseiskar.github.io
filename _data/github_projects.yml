@@ -16,6 +16,15 @@ black-hole:
         A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
         The contributions of various special and general relativistic effects can be toggled from the GUI.
         Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly.
+simdkalman:
+    title: SIMD Kalman
+    img: simdkalman.png
+    link:
+        name: Docs
+        url: https://simdkalman.readthedocs.io/en/latest/
+    description: |
+        Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
+        That is, running n similar Kalman filters on n independent series of observations.
 raytracer:
     title: Raytracer
     img: raytracer.png
