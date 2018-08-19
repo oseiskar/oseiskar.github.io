@@ -59,6 +59,15 @@ BaroFloorHeight:
       url: https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en
     description: |
         An Andoid app for measuring the height of storeys and buildings using the barometer.
+mersenne-twister:
+    title: Mersenne Twister
+    img: mersenne-twister.png
+    links:
+    - text: App
+      url: https://oseiskar.github.io/mersenne-twister
+    description: |
+        Can you spot the difference between the C random number generator
+        and Mersenne Twister?
 stash-js:
     title: stash.js
     img: stash-js.png
