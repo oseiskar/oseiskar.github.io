@@ -1,7 +1,9 @@
 tree-of-life:
     title: Tree of Life
     img: tree-of-life.png
-    app: true
+    links:
+    - text: App
+      url: https://oseiskar.github.io/tree-of-life
     description: |
         An interactive visualization of the Open Tree of Life using d3.js.
         The entire tree with approximately 2.3 million identified species as
@@ -11,7 +13,9 @@ tree-of-life:
 black-hole:
     title: Black Hole
     img: black-hole.jpg
-    app: true
+    links:
+    - text: App
+      url: https://oseiskar.github.io/black-hole
     description: |
         A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
         The contributions of various special and general relativistic effects can be toggled from the GUI.
@@ -19,41 +23,57 @@ black-hole:
 simdkalman:
     title: SIMD Kalman
     img: simdkalman.png
-    link:
-        name: Docs
-        url: https://simdkalman.readthedocs.io/en/latest/
+    links:
+    - text: Docs
+      url: https://simdkalman.readthedocs.io/en/latest/
     description: |
         Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
         That is, running n similar Kalman filters on n independent series of observations.
 raytracer:
     title: Raytracer
     img: raytracer.png
-    link:
-        name: Gallery
-        url: http://oseiskar.tumblr.com/search/%23opencl-raytracer
+    links:
+    - text: Gallery
+      url: http://oseiskar.tumblr.com/search/%23opencl-raytracer
     description: |
         An OpenCL-accelerated raytracer written in Python. Uses path tracing
         and supports advanced physics-based lighting effects such as dispersion
         and sub-surface scattering.
+3dtris:
+    title: AR-3dtris
+    img: 3dtris.jpg
+    links:
+    - text: Android app
+      url: https://play.google.com/store/apps/details?id=xyz.osei.tris
+    - text: Browser app
+      url: https://oseiskar.github.io/3dtris
+    description: |
+        Sort out a frustrating mess of falling 3D blocks in
+        Augmented Reality on Anrdoid or the browser. A game and an experiment
+        using WebGL, Emscripten and ARCore.
 BaroFloorHeight:
     title: Baro floor height
     img: baro-floor-height.png
-    link:
-        name: Android app
-        url: https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en
+    links:
+    - text: Android app
+      url: https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en
     description: |
         An Andoid app for measuring the height of storeys and buildings using the barometer.
 stash-js:
     title: stash.js
     img: stash-js.png
-    app: true
+    links:
+    - text: App
+      url: https://oseiskar.github.io/stash-js
     description: |
         A no-backend geocaching puzzle HTML app. Open with a mobile device
         for a reasonable user experience.
 tupas-test:
     title: TUPAS test
     img: tupas-test.png
-    app: true
+    links:
+    - text: App
+      url: https://oseiskar.github.io/tupas-test
     description: |
         Test page for TUPAS, a method used by Finnish banks to
         provide strong authentication services to other websites.
