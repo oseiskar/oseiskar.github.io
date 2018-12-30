@@ -29,16 +29,16 @@ simdkalman:
     description: |
         Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
         That is, running n similar Kalman filters on n independent series of observations.
-raytracer:
-    title: Raytracer
-    img: raytracer.png
+webgl-raytracer:
+    title: WebGL Raytracer
+    img: webgl-raytracer.png
     links:
-    - text: Gallery
-      url: http://oseiskar.tumblr.com/search/%23opencl-raytracer
+    - text: App
+      url: https://oseiskar.github.io/webgl-raytracer
     description: |
-        An OpenCL-accelerated raytracer written in Python. Uses path tracing
-        and supports advanced physics-based lighting effects such as dispersion
-        and sub-surface scattering.
+        Run a GPU-powered bidirectional raytracer in the browser and experiment with different
+        scenes and rendering options. Should work on Firefox and Chrome. GPGPU now possible
+        without spending hours installing CUDA!
 3dtris:
     title: AR-3dtris
     img: 3dtris.jpg
@@ -59,6 +59,16 @@ BaroFloorHeight:
       url: https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en
     description: |
         An Andoid app for measuring the height of storeys and buildings using the barometer.
+raytracer:
+    title: OpenCL Raytracer
+    img: raytracer.png
+    links:
+    - text: Gallery
+      url: http://oseiskar.tumblr.com/
+    description: |
+        An OpenCL-accelerated raytracer written in Python. Uses path tracing
+        and supports advanced physics-based lighting effects such as dispersion
+        and sub-surface scattering.
 mersenne-twister:
     title: Mersenne Twister
     img: mersenne-twister.png
