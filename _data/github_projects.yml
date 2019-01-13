@@ -64,7 +64,7 @@ raytracer:
     img: raytracer.png
     links:
     - text: Gallery
-      url: http://oseiskar.tumblr.com/
+      url: https://www.instagram.com/explore/tags/openclraytracer/
     description: |
         An OpenCL-accelerated raytracer written in Python. Uses path tracing
         and supports advanced physics-based lighting effects such as dispersion
