@@ -21,16 +21,25 @@ export default function Home() {
           <GithubProject
             name="Black Hole"
             repo="black-hole"
-            image="black-hole.jpg"
+            image="img/black-hole.jpg"
             url="https://oseiskar.github.io/black-hole"
             description="
               A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
               The contributions of various special and general relativistic effects can be toggled from the GUI.
               Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly."/>
           <GithubProject
+            name="WebGL Raytracer"
+            repo="webgl-raytracer"
+            image="img/webgl-raytracer.png"
+            url="https://oseiskar.github.io/webgl-raytracer"
+            description="
+              Run a GPU-powered bidirectional raytracer in the browser and experiment with different
+              scenes and rendering options. Should work on Firefox and Chrome. GPGPU now possible
+              without spending hours installing CUDA!"/>
+          <GithubProject
             name="Tree of Life"
             repo="tree-of-life"
-            image="tree-of-life.png"
+            image="img/tree-of-life.png"
             url="https://oseiskar.github.io/tree-of-life"
             description="
               An interactive visualization of the Open Tree of Life using d3.js.
@@ -39,18 +48,16 @@ export default function Home() {
               branches in the visualization represents the number of species
               they contain"/>
           <GithubProject
-            name="WebGL Raytracer"
-            repo="webgl-raytracer"
-            image="webgl-raytracer.png"
-            url="https://oseiskar.github.io/webgl-raytracer"
+            name="Corona Sniffer"
+            repo="corona-sniffer"
+            image="https://repository-images.githubusercontent.com/259749452/1f154800-8eb3-11ea-8824-2a31bc68aa84"
+            url="https://github.com/oseiskar/corona-sniffer"
             description="
-              Run a GPU-powered bidirectional raytracer in the browser and experiment with different
-              scenes and rendering options. Should work on Firefox and Chrome. GPGPU now possible
-              without spending hours installing CUDA!"/>
+              How anonymous is the Apple/Google BLE contract tracing system (GAEN/ENS)? A proof-of-concept BLE sniffing attack against the system."/>
           <GithubProject
             name="AR-3dtris"
             repo="3dtris"
-            image="3dtris.jpg"
+            image="img/3dtris.jpg"
             url="https://play.google.com/store/apps/details?id=xyz.osei.tris"
             description="
               Sort out a frustrating mess of falling 3D blocks in
@@ -59,7 +66,7 @@ export default function Home() {
           <GithubProject
             name="SIMD Kalman"
             repo="simdkalman"
-            image="simdkalman.png"
+            image="img/simdkalman.png"
             url="https://simdkalman.readthedocs.io/en/latest/"
             description="
               Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
@@ -67,7 +74,7 @@ export default function Home() {
           <GithubProject
             name="Mersenne Twister"
             repo="mersenne-twister"
-            image="mersenne-twister.png"
+            image="img/mersenne-twister.png"
             url="https://oseiskar.github.io/mersenne-twister"
             description="
               Can you spot the difference between the C random number generator
@@ -75,7 +82,7 @@ export default function Home() {
           <GithubProject
             name="Baro floor height"
             repo="BaroFloorHeight"
-            image="baro-floor-height.png"
+            image="img/baro-floor-height.png"
             url="https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en"
             description="
               An Andoid app for measuring the height of storeys and buildings using the barometer."/>
