@@ -17,7 +17,7 @@ export default function Home() {
           </code>
         </p>
 
-        <div className="flex flex-wrap items-center justify-around max-w-4xl mt-6 sm:w-full">
+        <div className="flex flex-wrap items-center justify-around max-w-7xl mt-6 sm:w-full">
           <GithubProject
             name="Black Hole"
             repo="black-hole"
@@ -78,7 +78,7 @@ export default function Home() {
             image="baro-floor-height.png"
             url="https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en"
             description="
-              An Andoid app for measuring the height of storeys and buildings using the barometer."/>                      
+              An Andoid app for measuring the height of storeys and buildings using the barometer."/>
         </div>
       </main>
     </div>
