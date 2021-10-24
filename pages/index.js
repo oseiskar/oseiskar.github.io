@@ -34,6 +34,30 @@ export default function Home() {
               scenes and rendering options. Should work on Firefox and Chrome. GPGPU now possible
               without spending hours installing CUDA!"/>
           <GithubProject
+            name="SIMD Kalman"
+            repo="simdkalman"
+            image="img/simdkalman.png"
+            url="https://simdkalman.readthedocs.io/en/latest/"
+            description="
+              Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
+              That is, running n similar Kalman filters on n independent series of observations."/>
+          <GithubProject
+            name="Corona Sniffer"
+            repo="corona-sniffer"
+            image="https://repository-images.githubusercontent.com/259749452/1f154800-8eb3-11ea-8824-2a31bc68aa84"
+            url="https://github.com/oseiskar/corona-sniffer"
+            description="
+              How anonymous is the Apple/Google BLE contract tracing system (GAEN/ENS)? A proof-of-concept BLE sniffing attack against the system."/>
+          <GithubProject
+            name="Autosubsync"
+            repo="autosubsync"
+            image="https://repository-images.githubusercontent.com/150953681/4b9f925d-37c5-45ec-829f-89b69466ba49"
+            url="https://github.com/oseiskar/autosubsync"
+            description="
+              Automatically synchronize SRT subtitles with audio using AI &amp; Machine Learning.
+              Automatic speed and shift correction, typical synchronization accuracy ~0.15 seconds.
+              Available as a Python package."/>
+          <GithubProject
             name="Tree of Life"
             repo="tree-of-life"
             image="img/tree-of-life.png"
@@ -45,12 +69,23 @@ export default function Home() {
               branches in the visualization represents the number of species
               they contain"/>
           <GithubProject
-            name="Corona Sniffer"
-            repo="corona-sniffer"
-            image="https://repository-images.githubusercontent.com/259749452/1f154800-8eb3-11ea-8824-2a31bc68aa84"
-            url="https://github.com/oseiskar/corona-sniffer"
+            name="JS car"
+            repo="js-car"
+            image="https://repository-images.githubusercontent.com/172246214/c09becb4-7529-400f-9e7a-4c2467156f43"
+            url="https://oseiskar.github.io/js-car"
             description="
-              How anonymous is the Apple/Google BLE contract tracing system (GAEN/ENS)? A proof-of-concept BLE sniffing attack against the system."/>
+              JavaScript 2D car dynamics simulation. The physics model is as simple as possible:
+              Frictional forces are applied to two points: the center of the front and
+              rear axle instead of the four wheels separately."/>
+          <GithubProject
+            name="QR cloner"
+            repo="qrcloner"
+            image="https://repository-images.githubusercontent.com/418668632/a1fbe5b1-1957-4329-a494-254e19dfac26"
+            url="https://play.google.com/store/apps/details?id=xyz.osei.qrcloner"
+            description="
+              The app allows you to scan a QR code and display it on your phone screen in high quality.
+              This is a quick and easy way of moving a QR code from your computer screen or a printed paper to your phone.
+              The code is saved on the phone and can later be displayed to QR code scanners."/>
           <GithubProject
             name="AR-3dtris"
             repo="3dtris"
@@ -61,14 +96,6 @@ export default function Home() {
               Augmented Reality on Anrdoid or the browser. A game and an experiment
               using WebGL, Emscripten and ARCore."/>
           <GithubProject
-            name="SIMD Kalman"
-            repo="simdkalman"
-            image="img/simdkalman.png"
-            url="https://simdkalman.readthedocs.io/en/latest/"
-            description="
-              Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
-              That is, running n similar Kalman filters on n independent series of observations."/>
-          <GithubProject
             name="Mersenne Twister"
             repo="mersenne-twister"
             image="img/mersenne-twister.png"
@@ -76,6 +103,12 @@ export default function Home() {
             description="
               Can you spot the difference between the C random number generator
               and Mersenne Twister?"/>
+          <GithubProject
+            name="Puzzles"
+            repo="puzzles"
+            image="https://repository-images.githubusercontent.com/48693032/cc2b23c7-b738-410e-b013-b7eb547c29d1"
+            url="https://oseiskar.github.io/puzzles"
+            description="Archive of ad hoc algorithmic solutions to physical puzzle games. Mostly throwaway-quality code, some of which only runs with Python 2."/>
           <GithubProject
             name="Baro floor height"
             repo="BaroFloorHeight"
