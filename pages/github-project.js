@@ -8,7 +8,7 @@ export default function GithubProject(props) {
           className="h-72 flex-none bg-auto bg-center rounded-non rounded-t-xl overflow-hidden shadow-xl"
           style={{ backgroundImage: "url('" + props.image + "')" }}>
         </div>
-        <div className="lg:h-72 bg-white rounded-b-xl rounded-t-none p-4 shadow-xl bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 border-t border-gray-200">
+        <div className="lg:h-72 bg-white rounded-b-xl rounded-t-none p-2 md:p-4 shadow-xl bg-gradient-to-r from-gray-100 to-gray-200 text-gray-900 border-t border-gray-200">
           <div className="mb-8 mt-6 mr-4 ml-8">
             <div className="full-w flex">
               <h3 className="text-2xl font-bold flex-grow">{props.name}</h3>

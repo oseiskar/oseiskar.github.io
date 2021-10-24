@@ -9,8 +9,8 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="flex flex-col items-center justify-center w-full flex-1 px-20 pt-10 pb-20">
-        <h1 className="mt-3 text-2xl">
+      <main className="flex flex-col items-center justify-center w-full flex-1 px-6 md:px-20 pt-10 pb-20">
+        <h1 className="md:mt-3 text-xl md:text-2xl">
           Selected open source projects by <a href='https://github.com/oseiskar' className="text-blue-700 hover:text-blue-300">oseiskar</a>
         </h1>
 
