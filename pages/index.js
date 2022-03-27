@@ -14,7 +14,7 @@ export default function Home() {
           Selected open source projects by <a href='https://github.com/oseiskar' className="text-blue-700 hover:text-blue-300">oseiskar</a>
         </h1>
 
-        <div className="flex flex-wrap items-center justify-around max-w-7xl mt-6 sm:w-full">
+        <div className="flex flex-wrap items-center justify-around xl:justify-between xl:max-w-7xl mt-6 sm:w-full">
           <GithubProject
             name="Black Hole"
             repo="black-hole"
