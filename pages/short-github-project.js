@@ -11,7 +11,12 @@ export default function ShortGithubProject(props) {
         <div className="pb-6 w-full">
           <div className="w-full flex">
             <a className="text-xl lg:text-2xl font-bold flex-grow hover:text-blue-700" href={ props.url }>{props.name}</a>
-            <a className="flex-none hover:text-blue-700 text-2xl text-gray-500" href={ 'https://github.com/oseiskar/' + props.repo }><FaGithub/></a>
+            <a className="flex-none hover:text-blue-700 text-2xl text-gray-500" href={ 'https://github.com/oseiskar/' + props.repo }>
+            { props.stars &&
+              <img className="mt-1" alt="GitHub Repo stars" src={ 'https://img.shields.io/github/stars/oseiskar/' + props.repo }/>
+            }
+            { !props.stars && <FaGithub/> }
+            </a>
            </div>
           <p className="mt-4 text-sm md:text-base">
           {props.description}

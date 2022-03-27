@@ -11,14 +11,14 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="flex flex-col items-center justify-center w-full flex-1 px-6 md:px-20 pt-10 pb-20">
+      <main className="flex flex-col items-center justify-center w-full flex-1 px-6 md:px-20 pt-2 md:pt-10 pb-20">
         <div className="flex flex-wrap items-left xl:max-w-7xl mt-6 sm:w-full">
         </div>
         <div className="w-full max-w-[38rem] xl:max-w-7xl">
-          <h1 className="text-3xl md:text-4xl">
+          <h1 className="text-4xl">
           Otto Seiskari
           </h1>
-          <p className="py-2 mb-6 text-gray-600">Programmer, entrepreneur, mathematician</p>
+          <p className="py-2 mb-6 text-gray-600">Programmer, math PhD (D.Sc.), startup CEO @ <a className="text-blue-700 hover:text-blue-400" href="https://www.spectacularai.com/">Spectacular AI</a></p>
           <div className="flex flex-wrap items-left gap-x-12 gap-y-6 mb-6 text-xl inline-block">
             <div className="flex flex-wrap items-left gap-12 text-xl inline-block">
               <a className="hover:text-blue-400" href="https://www.linkedin.com/in/otto-seiskari/"><FaLinkedin className="inline-block"/> Work</a>
@@ -33,7 +33,7 @@ export default function Home() {
               <a className="hover:text-blue-400 text-gray-500" href="https://github.com/oseiskar"><FaGithub className="inline-block"/> </a>
             </div>
           </div>
-          <h2 className="text-4xl">
+          <h2 className="text-2xl">
           Projects
           </h2>
           <p className="py-2">Selected open source hobby projects. More on <a href='https://github.com/oseiskar' className="text-blue-700 hover:text-blue-400">Github</a>.</p>
@@ -44,6 +44,7 @@ export default function Home() {
             name="Black Hole"
             repo="black-hole"
             image="img/black-hole.jpg"
+            stars={true}
             url="https://oseiskar.github.io/black-hole"
             description="
               A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
@@ -52,28 +53,32 @@ export default function Home() {
             name="SIMD Kalman"
             repo="simdkalman"
             image="img/simdkalman.png"
+            stars={true}
+            pypi="simdkalman"
             url="https://simdkalman.readthedocs.io/en/latest/"
             description="
               Fast Kalman filters in Python leveraging single-instruction multiple-data vectorization.
               That is, running n similar Kalman filters on n independent series of observations."/>
-        </div>
-        <div className="flex flex-wrap items-center justify-around xl:justify-between xl:max-w-7xl mt-6 sm:w-full">
-          <ShortGithubProject
+          <GithubProject
             name="Autosubsync"
             repo="autosubsync"
+            stars={true}
             image="https://repository-images.githubusercontent.com/150953681/4b9f925d-37c5-45ec-829f-89b69466ba49"
             url="https://github.com/oseiskar/autosubsync"
             description="
               Automatically synchronize SRT subtitles with audio using AI &amp; Machine Learning.
               Automatic speed and shift correction, typical synchronization accuracy ~0.15 seconds.
               Available as a Python package."/>
-          <ShortGithubProject
+          <GithubProject
             name="Corona Sniffer"
             repo="corona-sniffer"
+            stars={true}
             image="https://repository-images.githubusercontent.com/259749452/1f154800-8eb3-11ea-8824-2a31bc68aa84"
             url="https://github.com/oseiskar/corona-sniffer"
             description="
               How anonymous is the Apple/Google BLE contract tracing system (GAEN/ENS)? A proof-of-concept BLE sniffing attack against the system."/>
+        </div>
+        <div className="flex flex-wrap items-center justify-around xl:justify-between xl:max-w-7xl mt-6 sm:w-full">
           <ShortGithubProject
             name="WebGL Raytracer"
             repo="webgl-raytracer"
