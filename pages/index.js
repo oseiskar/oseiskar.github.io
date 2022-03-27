@@ -1,18 +1,42 @@
 import Head from 'next/head'
 import GithubProject from './github-project.js'
+import { FaGithub, FaLinkedin, FaOrcid, FaTwitter, FaKaggle, FaStackOverflow, FaMedium, FaInstagram } from 'react-icons/fa';
 
 export default function Home() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-gray-300">
+    <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-gradient-to-b from-gray-200 to-gray-400">
       <Head>
-        <title>oseiskar.github.io</title>
+        <title>Otto Seiskari - personal web page</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <main className="flex flex-col items-center justify-center w-full flex-1 px-6 md:px-20 pt-10 pb-20">
-        <h1 className="md:mt-3 text-xl md:text-2xl">
-          Selected open source projects by <a href='https://github.com/oseiskar' className="text-blue-700 hover:text-blue-300">oseiskar</a>
-        </h1>
+        <div className="flex flex-wrap items-left xl:max-w-7xl mt-6 sm:w-full">
+        </div>
+        <div className="w-full max-w-[38rem] xl:max-w-7xl">
+          <h1 className="text-3xl md:text-4xl">
+          Otto Seiskari
+          </h1>
+          <p className="py-2 mb-6 text-gray-600">Programmer, entrepreneur, mathematician</p>
+          <div className="flex flex-wrap items-left gap-x-12 gap-y-6 mb-6 text-xl inline-block">
+            <div className="flex flex-wrap items-left gap-12 text-xl inline-block">
+              <a className="hover:text-blue-400" href="https://www.linkedin.com/in/otto-seiskari/"><FaLinkedin className="inline-block"/> Work</a>
+              <a className="hover:text-blue-400" href="https://scholar.google.com/citations?user=6fr78PEAAAAJ">Publications</a>
+            </div>
+            <div className="flex flex-wrap items-left gap-12 mb-8 text-xl inline-block">
+              <a className="hover:text-blue-400 text-gray-500" href="https://www.kaggle.com/oseiskar"><FaKaggle className="inline-block"/> </a>
+              <a className="hover:text-blue-400 text-gray-500" href="https://twitter.com/oseiskar"><FaTwitter className="inline-block"/> </a>
+              <a className="hover:text-blue-400 text-gray-500" href="https://www.instagram.com/oseiskar/"><FaInstagram className="inline-block"/> </a>
+              <a className="hover:text-blue-400 text-gray-500" href="https://stackoverflow.com/users/1426569/oseiskar"><FaStackOverflow className="inline-block"/> </a>
+              <a className="hover:text-blue-400 text-gray-500" href="https://medium.com/@oseiskar"><FaMedium className="inline-block"/> </a>
+              <a className="hover:text-blue-400 text-gray-500" href="https://github.com/oseiskar"><FaGithub className="inline-block"/> </a>
+            </div>
+          </div>
+          <h2 className="text-4xl">
+          Projects
+          </h2>
+          <p className="py-2">Selected hobby projects. More on <a href='https://github.com/oseiskar' className="text-blue-700 hover:text-blue-400">Github</a>.</p>
+        </div>
 
         <div className="flex flex-wrap items-center justify-around xl:justify-between xl:max-w-7xl mt-6 sm:w-full">
           <GithubProject
