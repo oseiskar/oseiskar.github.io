@@ -52,6 +52,7 @@
                 v: v.v,
                 dim: v.dim,
                 name: k,
+                frequency: Math.round(v.t.length / ((tMax - t0) * 1e-9)),
                 range
             };
         });
@@ -149,7 +150,7 @@
                         <img v-if="data.image" :src="data.image" class="img-fluid mt-3" />
                         <ul class="list-group list-group-flush">
                             <li class="list-group-item" v-for="sensor in data.sensors" :key="sensor.name">
-                                <strong>{{ sensor.name }}</strong><br/>
+                                <strong>{{ sensor.name }}</strong> {{ sensor.frequency }} Hz<br/>
                                 
                                 <svg :width="300" :height="100" xmlns="http://www.w3.org/2000/svg">
                                     <g v-for="(p, index) in sensor.t" :key="index">
