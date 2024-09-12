@@ -26,6 +26,37 @@
         return token;
     }
 
+    function parseSensors(rawSensors) {
+        const keys = [];
+        for (const k in rawSensors) if (rawSensors.hasOwnProperty(k)) keys.push(k);
+        keys.sort();
+
+        const RANGES = {
+            'ACC': 30,
+            'MAG': 200,
+            'GYRO': 5,
+        }
+
+        return keys.map(k => {
+            const v = rawSensors[k];
+            const t = [];
+
+            const t0 = Math.min(...v.t);
+            const tMax = Math.max(...v.t);
+            let range = RANGES[k];
+            if (!range) {
+                range = Math.max(...v.v.map(vv => Math.abs(vv)));
+            }
+            return {
+                t: v.t.map(t => (t - t0)/Math.max(tMax-t0, 1e-3)),
+                v: v.v,
+                dim: v.dim,
+                name: k,
+                range
+            };
+        });
+    }
+
     function initUI(secretPrefix) {
         // Initialize Firebase
         const firebaseConfig = {
@@ -59,7 +90,7 @@
                             onSnapshot(collection(doc.ref, "preview_data"), previewSnapshot => {
                                 const dd =previewSnapshot.docs[0]["data"]();
                                 images[doc.id] = 'data:image/jpeg;base64,' + dd["data"];
-                                sensors[doc.id] = dd["sensors"];
+                                sensors[doc.id] = parseSensors(dd["sensors"]);
                                 this.documents[doc.id]['image'] = images[doc.id];
                                 this.documents[doc.id]['sensors'] = sensors[doc.id];
                             });
@@ -117,16 +148,16 @@
                         </ul>
                         <img v-if="data.image" :src="data.image" class="img-fluid mt-3" />
                         <ul class="list-group list-group-flush">
-                            <li class="list-group-item" v-for="(value, key) in data.sensors" :key="key">
-                                <strong>{{ key }}:</strong>
+                            <li class="list-group-item" v-for="sensor in data.sensors" :key="sensor.name">
+                                <strong>{{ sensor.name }}</strong><br/>
                                 
                                 <svg :width="300" :height="100" xmlns="http://www.w3.org/2000/svg">
-                                    <g v-for="(p, index) in value.t" :key="index">
+                                    <g v-for="(p, index) in sensor.t" :key="index">
                                         <circle
-                                            v-for="j in range(value.dim)"
+                                            v-for="j in range(sensor.dim)"
                                             :key="j"
-                                            :cx="index/1000*300"
-                                            :cy="value.v[index*value.dim + j] + 50"
+                                            :cx="p * 300"
+                                            :cy="sensor.v[index*sensor.dim + j]/sensor.range * 50 + 50"
                                             r="1"
                                             :fill="['red', 'green', 'blue'][j%3]"
                                         />
