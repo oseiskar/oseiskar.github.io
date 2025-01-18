@@ -1,6 +1,4 @@
 import Head from 'next/head';
-import Image from 'next/image';
-import person from '../public/img/otto.jpg';
 import { GithubProject, ShortGithubProject } from './github-project.js';
 import { FaGithub, FaLinkedin, FaOrcid, FaTwitter, FaKaggle, FaStackOverflow, FaMedium, FaInstagram } from 'react-icons/fa';
 
@@ -17,12 +15,10 @@ export default function Home() {
       */}
       <aside className="flex flex-col mb-10 px-6 lg:px-0">
         <div className="inline-flex flex-col items-center lg:ml-auto lg:pr-12 lg:w-72">
-          <Image
-            src={person}
+          <img
+            src="img/otto.jpg"
             alt="Person"
             className="rounded-full object-cover shadow-lg w-72"
-            priority
-            unoptimized
           />
           <span className="text-3xl mt-8">Otto Seiskari</span>
           <span className="my-5 text-gray-600 text-center">Programmer, math PhD (D.Sc.), startup CEO @ <a href="https://www.spectacularai.com/">Spectacular AI</a></span>
