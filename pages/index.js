@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import { GithubProject, ShortGithubProject } from './github-project.js';
-import { FaGithub, FaLinkedin, FaOrcid, FaTwitter, FaKaggle, FaStackOverflow, FaMedium, FaInstagram } from 'react-icons/fa';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLinkedin, faGithub, faInstagram, faXTwitter, faKaggle, faStackOverflow, faMedium, faGoogleScholar, faBluesky } from '@fortawesome/free-brands-svg-icons';
 
 export default function Home() {
   return (
@@ -13,7 +14,7 @@ export default function Home() {
       {/* 
         Left Column
       */}
-      <aside className="flex flex-col mb-10 px-6 lg:px-0">
+      <aside className="flex flex-col mb-10 px-6 lg:pr-0">
         <div className="inline-flex flex-col items-center lg:ml-auto lg:pr-12 lg:w-72">
           <img
             src="img/otto.jpg"
@@ -21,17 +22,21 @@ export default function Home() {
             className="rounded-full object-cover shadow-lg w-72"
           />
           <span className="text-3xl mt-8">Otto Seiskari</span>
-          <span className="my-5 text-gray-600 text-center">Programmer, math PhD (D.Sc.), startup CEO @ <a href="https://www.spectacularai.com/">Spectacular AI</a></span>
+          <span className="my-6 aside-small-texts text-center">Programmer, math PhD (D.Sc.), startup CEO @ <a href="https://www.spectacularai.com/">Spectacular AI</a></span>
 
-          <div className="flex flex-wrap items-left gap-2 text-xl inline-block">
-            <a className="hover:text-blue-400 text-gray-500" href="https://www.linkedin.com/in/otto-seiskari/"><FaLinkedin className="inline-block"/></a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://scholar.google.com/citations?user=6fr78PEAAAAJ"><FaOrcid className="inline-block"/></a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://www.kaggle.com/oseiskar"><FaKaggle className="inline-block"/> </a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://twitter.com/oseiskar"><FaTwitter className="inline-block"/> </a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://www.instagram.com/oseiskar/"><FaInstagram className="inline-block"/> </a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://stackoverflow.com/users/1426569/oseiskar"><FaStackOverflow className="inline-block"/> </a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://medium.com/@oseiskar"><FaMedium className="inline-block"/> </a>
-            <a className="hover:text-blue-400 text-gray-500" href="https://github.com/oseiskar"><FaGithub className="inline-block"/> </a>
+          <div className="flex flex-row flex-wrap lg:flex-col gap-4 max-w-80 justify-center my-2 menu-links">
+          <a className="menu-link" href="https://github.com/oseiskar"><FontAwesomeIcon icon={faGithub} className="menu-icon" />Code</a>
+          <a className="menu-link" href="https://scholar.google.com/citations?user=6fr78PEAAAAJ"><FontAwesomeIcon icon={faGoogleScholar} className="menu-icon" />Publications</a>
+            <a className="menu-link" href="https://www.linkedin.com/in/otto-seiskari/"><FontAwesomeIcon icon={faLinkedin} className="menu-icon" />Work</a>
+            <a className="menu-link" href="https://www.instagram.com/oseiskar/"><FontAwesomeIcon icon={faInstagram} className="menu-icon" />Graphics</a>
+          </div>
+          <div className="mt-6 icon-links">
+            <span className="text-sm aside-small-texts mr-2">Follow:</span>
+            <a className="icon-link" href="https://twitter.com/oseiskar"><FontAwesomeIcon icon={faXTwitter} className="misc-icon" /></a>
+            <a className="icon-link" href="https://bsky.app/profile/oseiskar.bsky.social"><FontAwesomeIcon icon={faBluesky} className="misc-icon" /></a>
+            <a className="icon-link" href="https://stackoverflow.com/users/1426569/oseiskar"><FontAwesomeIcon icon={faStackOverflow} className="misc-icon" /> </a>
+            <a className="icon-link" href="https://www.kaggle.com/oseiskar"><FontAwesomeIcon icon={faKaggle} className="misc-icon" /></a>
+            <a className="icon-link" href="https://medium.com/@oseiskar"><FontAwesomeIcon icon={faMedium} className="misc-icon" /></a>
           </div>
         </div>
       </aside>
@@ -40,11 +45,11 @@ export default function Home() {
         Right Column (Main Content)
       */}
       <section className="flex-1 lg:pl-12 px-6">
-        <h1>Featured projects</h1>
+        <h1>Featured open source projects</h1>
         <div className="flex flex-wrap items-center justify-around xl:justify-between w-full">
         <ShortGithubProject
           name="SIMD Kalman"
-          repo="simdkalman"
+          repo="oseiskar/simdkalman"
           image="img/simdkalman.png"
           stars={true}
           pypi="simdkalman"
@@ -54,7 +59,7 @@ export default function Home() {
             That is, running n similar Kalman filters on n independent series of observations."/>
         <ShortGithubProject
           name="Autosubsync"
-          repo="autosubsync"
+          repo="oseiskar/autosubsync"
           stars={true}
           image="https://repository-images.githubusercontent.com/150953681/4b9f925d-37c5-45ec-829f-89b69466ba49"
           url="https://github.com/oseiskar/autosubsync"
@@ -64,7 +69,7 @@ export default function Home() {
             Available as a Python package."/>
         <ShortGithubProject
           name="Corona Sniffer"
-          repo="corona-sniffer"
+          repo="oseiskar/corona-sniffer"
           stars={true}
           image="https://repository-images.githubusercontent.com/259749452/1f154800-8eb3-11ea-8824-2a31bc68aa84"
           url="https://github.com/oseiskar/corona-sniffer"
@@ -72,7 +77,7 @@ export default function Home() {
             How anonymous is the Apple/Google BLE contract tracing system (GAEN/ENS)? A proof-of-concept BLE sniffing attack against the system."/>
         <GithubProject
           name="Black Hole"
-          repo="black-hole"
+          repo="oseiskar/black-hole"
           image="img/black-hole.jpg"
           stars={true}
           url="https://oseiskar.github.io/black-hole"
@@ -80,8 +85,16 @@ export default function Home() {
             A real time ray-traced simulation of a Schwarzschild black hole using THREE.js.
             The contributions of various special and general relativistic effects can be toggled from the GUI."/>
         <GithubProject
+          name="HybVIO"
+          repo="SpectacularAI/HybVIO"
+          image="https://repository-images.githubusercontent.com/431543298/b2635e09-464a-47b3-ad18-cb138a51c820"
+          stars={true}
+          url="https://arxiv.org/abs/2106.11857"
+          description="
+            Real-time visual-inertial SLAM system with excellent performance in academic benchmarks and custom vehicular data. Developed at Spectacular AI and Published in WACV '22."/>
+        <GithubProject
           name="WebGL Raytracer"
-          repo="webgl-raytracer"
+          repo="oseiskar/webgl-raytracer"
           image="img/webgl-raytracer.png"
           stars={true}
           url="https://oseiskar.github.io/webgl-raytracer"
@@ -91,7 +104,7 @@ export default function Home() {
             without spending hours installing CUDA!"/>
         <GithubProject
           name="JS car"
-          repo="js-car"
+          repo="oseiskar/js-car"
           stars={true}
           image="https://repository-images.githubusercontent.com/172246214/c09becb4-7529-400f-9e7a-4c2467156f43"
           url="https://oseiskar.github.io/js-car"
@@ -101,7 +114,7 @@ export default function Home() {
             rear axle."/>
         <GithubProject
           name="Tree of Life"
-          repo="tree-of-life"
+          repo="oseiskar/tree-of-life"
           image="img/tree-of-life.png"
           stars={true}
           url="https://oseiskar.github.io/tree-of-life"
@@ -111,13 +124,13 @@ export default function Home() {
             leaf nodes is browsable through the application."/>
         <GithubProject
           name="Puzzles"
-          repo="puzzles"
+          repo="oseiskar/puzzles"
           image="https://repository-images.githubusercontent.com/48693032/cc2b23c7-b738-410e-b013-b7eb547c29d1"
           url="https://oseiskar.github.io/puzzles"
           description="Archive of ad hoc algorithmic solutions to physical puzzle games. Mostly throwaway-quality code, some of which only runs with Python 2."/>
         <GithubProject
           name="Mersenne Twister"
-          repo="mersenne-twister"
+          repo="oseiskar/mersenne-twister"
           image="img/mersenne-twister.png"
           url="https://oseiskar.github.io/mersenne-twister"
           description="
@@ -127,14 +140,14 @@ export default function Home() {
           false && <div>
             <ShortGithubProject
               name="Baro floor height"
-              repo="BaroFloorHeight"
+              repo="oseiskar/BaroFloorHeight"
               image="img/baro-floor-height.png"
               url="https://play.google.com/store/apps/details?id=xyz.osei.baro&hl=en"
               description="
               An Andoid app for measuring the height of storeys and buildings using the barometer."/>
             <ShortGithubProject
               name="QR cloner"
-              repo="qrcloner"
+              repo="oseiskar/qrcloner"
               image="https://repository-images.githubusercontent.com/418668632/a1fbe5b1-1957-4329-a494-254e19dfac26"
               url="https://github.com/oseiskar/qr-cloner"
               description="

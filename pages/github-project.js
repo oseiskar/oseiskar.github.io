@@ -1,35 +1,39 @@
 import { FaGithub } from 'react-icons/fa';
 
 function ghStars(props, extraClass='') {
-  return <a className={'text-2xl text-gray-500 ' + extraClass } href={ 'https://github.com/oseiskar/' + props.repo }>
+  return <a className={'text-2xl text-gray-500 ' + extraClass } href={ 'https://github.com/' + props.repo }>
     { props.stars &&
-      <img className="mt-2 lg:mt-1" alt="GitHub Repo stars" src={ 'https://img.shields.io/github/stars/oseiskar/' + props.repo }/>
+      <img className="mt-2 lg:mt-1" alt="GitHub Repo stars" src={ 'https://img.shields.io/github/stars/' + props.repo }/>
     }
-    { !props.stars && <span class="text-lg lg:text-xl hidden lg:inline-block"><FaGithub/></span> }
+    { !props.stars && <span class="text-lg xl:text-xl inline-block"><FaGithub/></span> }
   </a>
+}
+
+function sideStars(props) {
+  return <div className="w-40 hidden xl:flex">
+    { ghStars(props, 'ml-8 mt-2') }
+  </div>
 }
 
 export function GithubProject(props) {
   return (
-    <div className="flex flex-row w-full mb-6">
+    <div className="flex sm:flex-row flex-col w-full mb-6 mt-4">
       <div className="flex-1">
-        <div className="pb-6 pr-4 sm:pr-6 lg:mt-4">
-          <a className="text-lg lg:text-xl flex-grow font-bold hover:text-blue-700" href={ props.url }>{props.name}</a>
+        <div className="pb-2 pr-4 sm:pr-8 xl:pr-12 lg:mt-2">
+          <div className="flex flex-row">
+            <a className="text-lg lg:text-xl font-bold flex-grow" href={ props.url }>{props.name}</a>
+            { ghStars(props, "flex-none xl:hidden") }
+          </div>
           <p className="my-3 text-sm sm:text-base">
             {props.description}
           </p>
-          <span className="lg:hidden">
-            { ghStars(props) }
-          </span>
         </div>
       </div>
       <a href={ props.url }
-        className="w-40 lg:w-64 lg:h-40 bg-cover bg-center inline-block rounded-lg shadow-lg"
+        className="w-full sm:w-64 h-52 sm:h-40 bg-cover bg-center inline-block rounded-lg shadow-lg"
         style={{ backgroundImage: "url('" + props.image + "')" }}>
       </a>
-      <div className="lg:w-40 hidden lg:flex">
-        { ghStars(props, 'ml-12 mt-4') }
-      </div>
+      {sideStars(props)}
     </div>
   )
 }
@@ -39,7 +43,7 @@ export function ShortGithubProject(props) {
     <div className="flex flex-row w-full mb-6">
       <div className="w-40 lg:w-48">
         <a className="text-lg lg:text-xl font-bold" href={ props.url }>{props.name}</a>
-        <span className="lg:hidden">
+        <span className="xl:hidden">
           { ghStars(props) }
         </span>
       </div>
@@ -54,9 +58,7 @@ export function ShortGithubProject(props) {
           </p>
         </div>
       </div>
-      <div className="lg:w-40 hidden lg:flex">
-        { ghStars(props, 'ml-12 mt-2') }
-      </div>
+      {sideStars(props)}
     </div>
   )
 }
