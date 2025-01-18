@@ -60,3 +60,5 @@ export function ShortGithubProject(props) {
     </div>
   )
 }
+
+export default ShortGithubProject;
