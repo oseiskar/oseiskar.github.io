@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gradient-to-b from-gray-200 to-blue-100;
+  margin-top: 4%;
+  margin-bottom: 4%;
+}
+
+a {
+  @apply text-blue-600 hover:underline hover:text-blue-400;
+}
+
+h1 {
+    @apply text-2xl sm:text-3xl font-bold;
+    margin-bottom: 2rem;
+}
+
+p {
+    @apply text-justify;
+}
+
+.menu-link {
+    @apply text-xl text-gray-800;
+}
+
+.icon-link {
+    @apply text-gray-800 text-xl mx-1;
+}
+
+.menu-icon {
+    @apply inline-block w-10;
+}
+
+.menu-links {
+}
+
+.icon-links {
+    @apply inline-block;
+}
+
+.aside-small-texts {
+    @apply text-gray-800 text-base;
+}
