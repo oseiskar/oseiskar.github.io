@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-200 text-gray-900;
+  /* @apply bg-gradient-to-b from-gray-200 to-gray-300; */
+  margin-top: 4%;
+  margin-bottom: 4%;
+}
+
+a {
+  @apply text-blue-600 hover:underline hover:text-blue-400;
+}
+
+h1 {
+    @apply text-3xl font-bold;
+    margin-bottom: 2rem;
+}
+
+p {
+    @apply text-justify;
+}
