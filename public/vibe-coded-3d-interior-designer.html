@@ -313,8 +313,10 @@
   <input type="range" class="tb-range" id="floor-opacity" min="0" max="1" step="0.05" value="0.25">
   <div class="divider"></div>
   <span class="tb-label">AO:</span>
-  <input type="number" class="tb-num" id="ao-radius" value="20" min="1" max="200" step="1" title="AO radius in cm">
+  <input type="number" class="tb-num" id="ao-radius" value="50" min="1" max="200" step="1" title="AO radius in cm">
   <span class="tb-label">cm</span>
+  <input type="number" class="tb-num" id="ao-intensity" value="5" min="0.5" max="20" step="0.5" title="AO strength">
+  <span class="tb-label">str</span>
   <div class="divider"></div>
   <label style="display:flex;align-items:center;gap:4px;" title="3D background color">
     <span class="tb-label">Bg color</span>
@@ -1081,19 +1083,37 @@ document.getElementById('json-load-start').addEventListener('change', e => {
 
 // ─── Save JSON ────────────────────────────────────────────────────────────
 document.getElementById('btn-save').addEventListener('click', () => {
+  // Deduplicate textures: collect unique texData strings into a top-level array
+  // and replace each material's texData with a texRef index.
+  const textures = [];
+  const texIndex = new Map();
+  function texRef(texData) {
+    if (!texData) return null;
+    if (!texIndex.has(texData)) { texIndex.set(texData, textures.length); textures.push(texData); }
+    return texIndex.get(texData);
+  }
+  function serializeMat(m) {
+    const out = {...m};
+    if (out.texData) { out.texRef = texRef(out.texData); delete out.texData; }
+    return out;
+  }
+
   const payload = {
-    version: 6,
+    version: 7,
     canvasW: state.canvasW, canvasH: state.canvasH,
     floorSrc: state.floorSrc, nextId: state.nextId,
-    materials: materials.map(m => ({...m})),
+    textures,
+    materials: materials.map(serializeMat),
     nextMatId,
     boxes: state.boxes.map(b => ({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ,maxZ:b.maxZ,matId:b.matId})),
     defaultProps: {...defaultProps},
     defaultMatId,
-    envMat: { floor:{...envMat.floor}, ceil:{...envMat.ceil} },
+    envMat: { floor: serializeMat({...envMat.floor}), ceil: serializeMat({...envMat.ceil}) },
     scaleLine: state.scaleLine, pixelsPerCm: state.pixelsPerCm,
     floorOpacity: state.floorOpacity,
     brightness: parseFloat(document.getElementById('brightness').value),
+    aoRadius:   parseFloat(document.getElementById('ao-radius').value)||50,
+    aoIntensity: parseFloat(document.getElementById('ao-intensity').value)||5,
     walkCam: { x:walkX, z:walkZ, yaw:walkYaw, pitch:walkPitch, fov:camera.fov },
   };
   const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
@@ -1235,9 +1255,19 @@ function loadFromJSON(data) {
   for (const id of [...meshMap.keys()]) removeMesh(id);
   setSelected(null);
 
+  // v7+: textures are deduplicated into a top-level array; each material has
+  // texRef instead of texData.  v6 files have texData inline — also handled.
+  const textures = data.textures || [];
+  function resolveMat(m) {
+    if (!m) return m;
+    const out = {...m};
+    if (out.texRef != null) { out.texData = textures[out.texRef] ?? null; delete out.texRef; }
+    return out;
+  }
+
   if (data.materials && data.materials.length > 0) {
     // v6+ — material library present
-    materials = data.materials.map(m => ({...m}));
+    materials = data.materials.map(m => resolveMat({...m}));
     nextMatId = data.nextMatId || (Math.max(0,...materials.map(m=>m.id))+1);
     state.boxes = (data.boxes||[]).map(b => ({
       id:b.id, x:b.x, y:b.y, w:b.w, h:b.h,
@@ -1285,8 +1315,8 @@ function loadFromJSON(data) {
   }
   if (data.defaultProps) Object.assign(defaultProps, data.defaultProps);
   if (data.envMat) {
-    if (data.envMat.floor) { Object.assign(envMat.floor, data.envMat.floor); updateMatDisplay(envMat.floor, document.getElementById('wc-floor-swatch'), null); }
-    if (data.envMat.ceil)  { Object.assign(envMat.ceil,  data.envMat.ceil);  updateMatDisplay(envMat.ceil,  document.getElementById('wc-ceil-swatch'),  null); }
+    if (data.envMat.floor) { Object.assign(envMat.floor, resolveMat(data.envMat.floor)); updateMatDisplay(envMat.floor, document.getElementById('wc-floor-swatch'), null); }
+    if (data.envMat.ceil)  { Object.assign(envMat.ceil,  resolveMat(data.envMat.ceil));  updateMatDisplay(envMat.ceil,  document.getElementById('wc-ceil-swatch'),  null); }
   }
   if (data.walkCam) {
     const wc = data.walkCam;
@@ -1294,6 +1324,9 @@ function loadFromJSON(data) {
     if (wc.fov) { camera.fov=wc.fov; camera.updateProjectionMatrix(); }
     walkInitialized = true;
   }
+
+  if (data.aoRadius    != null) document.getElementById('ao-radius').value    = data.aoRadius;
+  if (data.aoIntensity != null) document.getElementById('ao-intensity').value = data.aoIntensity;
 
   const afterImage = () => {
     rebuildFloor(); setWalkSurfaces(); updateSSAO();
@@ -1362,29 +1395,32 @@ document.getElementById('floor-opacity').addEventListener('input',e=>{
   render2D();
 });
 
-// ─── GTAO ─────────────────────────────────────────────────────────────────
+// ─── GTAOPass + composer ───────────────────────────────────────────────────
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene,camera));
-const gtaoPass = new GTAOPass(scene,camera,800,600);
+composer.addPass(new RenderPass(scene, camera));
+const gtaoPass = new GTAOPass(scene, camera, 800, 600);
 gtaoPass.output = GTAOPass.OUTPUT.Default;
 composer.addPass(gtaoPass);
 composer.addPass(new OutputPass());
 
 function updateSSAO() {
-  if (!state.pixelsPerCm) return;
-  const aoCm = parseFloat(document.getElementById('ao-radius').value)||20;
-  const r = aoCm*getYScale();
-  gtaoPass.updateGtaoMaterial({radius:r,distanceExponent:2,thickness:r*4,distanceFallOff:1,scale:1});
+  const aoCm = parseFloat(document.getElementById('ao-radius').value)||50;
+  const str  = parseFloat(document.getElementById('ao-intensity').value)||5;
+  const r = aoCm * getYScale();
+  gtaoPass.updateGtaoMaterial({ radius: r, distanceExponent: 2, thickness: r * 4, distanceFallOff: 1, scale: 1 });
+  gtaoPass.blendIntensity = str;
 }
 document.getElementById('ao-radius').addEventListener('input',updateSSAO);
+document.getElementById('ao-intensity').addEventListener('input',updateSSAO);
 
 // ─── Floor + coordinates ──────────────────────────────────────────────────
 let floorMesh = null;
 const texLoader = new THREE.TextureLoader();
-const WORLD_SIZE = 10;
-
-function getScale()  { return WORLD_SIZE/Math.max(state.canvasW,state.canvasH); }
-function getYScale() { return state.pixelsPerCm ? getScale()*state.pixelsPerCm : getScale(); }
+// 1 Three.js unit = 1 metre.
+// getYScale(): cm → m, always 0.01 regardless of canvas or image size.
+// getScale():  canvas pixels → m.  Before calibration, falls back to 1 px = 1 cm.
+function getYScale() { return 0.01; }
+function getScale()  { return state.pixelsPerCm ? 0.01 / state.pixelsPerCm : 0.01; }
 
 function rebuildFloor() {
   if (floorMesh){scene.remove(floorMesh);floorMesh.geometry.dispose();floorMesh.material.dispose();}
@@ -1513,7 +1549,7 @@ function highlightSelected3D() {
 // ─── Resize ───────────────────────────────────────────────────────────────
 function onResize() {
   const w=wrap.clientWidth,h=wrap.clientHeight; if(!w||!h) return;
-  renderer.setSize(w,h); composer.setSize(w,h); gtaoPass.setSize(w,h);
+  renderer.setSize(w,h); composer.setSize(w,h); n8aoPass.setSize(w,h);
   camera.aspect=w/h; camera.updateProjectionMatrix();
 }
 new ResizeObserver(onResize).observe(wrap); onResize();
@@ -1587,11 +1623,18 @@ function handleVRInput() {
     const ax = gp.axes[2] ?? 0;
     const ay = gp.axes[3] ?? 0;
     if (src.handedness === 'left' && (Math.abs(ax) > 0.12 || Math.abs(ay) > 0.12)) {
-      // Move relative to headset's horizontal look direction
-      const xrCam = renderer.xr.getCamera();
-      const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(xrCam.quaternion);
+      // Heading fix: renderer.xr.getCamera() (ArrayCamera) has its world matrix
+      // updated only inside renderer.render(), so it is one frame stale here.
+      // The eye sub-cameras' .quaternion is written directly from the XR frame
+      // data before our loop runs, so it is always current.
+      // Combine physical head orientation (eyes[0].quaternion) with accumulated
+      // snap-turns (vrRig.quaternion) to get the correct virtual-world heading.
+      const eyes = renderer.xr.getCamera().cameras;
+      if (!eyes.length) continue;
+      const worldQ = vrRig.quaternion.clone().multiply(eyes[0].quaternion);
+      const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(worldQ);
       fwd.y = 0; fwd.normalize();
-      const rgt = new THREE.Vector3(1,0,0).applyQuaternion(xrCam.quaternion);
+      const rgt = new THREE.Vector3(1,0,0).applyQuaternion(worldQ);
       rgt.y = 0; rgt.normalize();
       vrRig.position.addScaledVector(fwd, -ay * SPEED);
       vrRig.position.addScaledVector(rgt,  ax * SPEED);
@@ -1599,7 +1642,15 @@ function handleVRInput() {
     if (src.handedness === 'right') {
       // Snap-turn: 45° per flick, wait for stick to return to centre before turning again
       if (Math.abs(ax) > 0.7 && !vrSnapCooldown) {
+        // camera.position is the XR-tracked head offset in rig-local space.
+        // Rotating the rig pivots the camera around the rig's origin, not the
+        // user's actual standing position.  Save the camera's world-XZ before
+        // rotating, then translate the rig to cancel the unwanted drift.
+        const camBefore = camera.position.clone().applyQuaternion(vrRig.quaternion);
         vrRig.rotateY(-Math.sign(ax) * (Math.PI / 4));
+        const camAfter = camera.position.clone().applyQuaternion(vrRig.quaternion);
+        vrRig.position.x += camBefore.x - camAfter.x;
+        vrRig.position.z += camBefore.z - camAfter.z;
         vrSnapCooldown = true;
       } else if (Math.abs(ax) < 0.3) {
         vrSnapCooldown = false;
@@ -1661,10 +1712,8 @@ document.getElementById('wc-ceil-mat-btn').addEventListener('click',()=>{
 // setAnimationLoop is required for WebXR (replaces requestAnimationFrame).
 renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) {
-    // In VR: read controller input, render directly to XR framebuffer.
-    // EffectComposer targets an internal RT so we bypass it here.
     handleVRInput();
-    renderer.render(scene, camera);
+    renderer.render(scene, camera); // SSAO not applied in XR mode
   } else if (walkMode) {
     const sinY=Math.sin(walkYaw),cosY=Math.cos(walkYaw);
     let dx=0,dz=0;
@@ -1922,6 +1971,7 @@ document.getElementById('mat-add-btn').addEventListener('click', () => {
 // ─── Init ─────────────────────────────────────────────────────────────────
 enterPhase('start');
 setWalkSurfaces();
+updateSSAO(); // configure GTAO with correct metre-scale radius from the start
 </script>
 </body>
 </html>
