@@ -313,7 +313,7 @@
   <input type="range" class="tb-range" id="floor-opacity" min="0" max="1" step="0.05" value="0.25">
   <div class="divider"></div>
   <span class="tb-label">AO:</span>
-  <input type="number" class="tb-num" id="ao-radius" value="20" min="1" max="200" step="1" title="AO radius in cm">
+  <input type="number" class="tb-num" id="ao-radius" value="50" min="1" max="200" step="1" title="AO radius in cm">
   <span class="tb-label">cm</span>
   <div class="divider"></div>
   <label style="display:flex;align-items:center;gap:4px;" title="3D background color">
@@ -1371,9 +1371,9 @@ composer.addPass(gtaoPass);
 composer.addPass(new OutputPass());
 
 function updateSSAO() {
-  if (!state.pixelsPerCm) return;
-  const aoCm = parseFloat(document.getElementById('ao-radius').value)||20;
-  const r = aoCm*getYScale();
+  // getYScale() is always 0.01 (1 cm = 0.01 m), so no pixelsPerCm guard needed.
+  const aoCm = parseFloat(document.getElementById('ao-radius').value)||50;
+  const r = aoCm * getYScale();
   gtaoPass.updateGtaoMaterial({radius:r,distanceExponent:2,thickness:r*4,distanceFallOff:1,scale:1});
 }
 document.getElementById('ao-radius').addEventListener('input',updateSSAO);
@@ -1381,10 +1381,11 @@ document.getElementById('ao-radius').addEventListener('input',updateSSAO);
 // ─── Floor + coordinates ──────────────────────────────────────────────────
 let floorMesh = null;
 const texLoader = new THREE.TextureLoader();
-const WORLD_SIZE = 10;
-
-function getScale()  { return WORLD_SIZE/Math.max(state.canvasW,state.canvasH); }
-function getYScale() { return state.pixelsPerCm ? getScale()*state.pixelsPerCm : getScale(); }
+// 1 Three.js unit = 1 metre.
+// getYScale(): cm → m, always 0.01 regardless of canvas or image size.
+// getScale():  canvas pixels → m.  Before calibration, falls back to 1 px = 1 cm.
+function getYScale() { return 0.01; }
+function getScale()  { return state.pixelsPerCm ? 0.01 / state.pixelsPerCm : 0.01; }
 
 function rebuildFloor() {
   if (floorMesh){scene.remove(floorMesh);floorMesh.geometry.dispose();floorMesh.material.dispose();}
@@ -1587,11 +1588,14 @@ function handleVRInput() {
     const ax = gp.axes[2] ?? 0;
     const ay = gp.axes[3] ?? 0;
     if (src.handedness === 'left' && (Math.abs(ax) > 0.12 || Math.abs(ay) > 0.12)) {
-      // Move relative to headset's horizontal look direction
+      // Move relative to headset's WORLD heading (accounts for vrRig snap-turns).
+      // xrCam.quaternion is local to vrRig, so we must use getWorldQuaternion().
       const xrCam = renderer.xr.getCamera();
-      const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(xrCam.quaternion);
+      const worldQ = new THREE.Quaternion();
+      xrCam.getWorldQuaternion(worldQ);
+      const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(worldQ);
       fwd.y = 0; fwd.normalize();
-      const rgt = new THREE.Vector3(1,0,0).applyQuaternion(xrCam.quaternion);
+      const rgt = new THREE.Vector3(1,0,0).applyQuaternion(worldQ);
       rgt.y = 0; rgt.normalize();
       vrRig.position.addScaledVector(fwd, -ay * SPEED);
       vrRig.position.addScaledVector(rgt,  ax * SPEED);
@@ -1922,6 +1926,7 @@ document.getElementById('mat-add-btn').addEventListener('click', () => {
 // ─── Init ─────────────────────────────────────────────────────────────────
 enterPhase('start');
 setWalkSurfaces();
+updateSSAO(); // configure GTAO with correct metre-scale radius from the start
 </script>
 </body>
 </html>
