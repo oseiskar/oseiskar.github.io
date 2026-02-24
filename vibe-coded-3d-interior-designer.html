@@ -539,6 +539,7 @@ import { GTAOPass }                from 'three/addons/postprocessing/GTAOPass.js
 import { OutputPass }              from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFExporter }            from 'three/addons/exporters/GLTFExporter.js';
 import { XRControllerModelFactory} from 'three/addons/webxr/XRControllerModelFactory.js';
+import { FullScreenQuad }          from 'three/addons/postprocessing/Pass.js';
 
 // ─── Material library ─────────────────────────────────────────────────────
 let materials = [];   // { id, name, type, color, metalness, roughness, opacity, texData, texScale }
@@ -1370,11 +1371,34 @@ gtaoPass.output = GTAOPass.OUTPUT.Default;
 composer.addPass(gtaoPass);
 composer.addPass(new OutputPass());
 
+// ─── VR per-eye SSAO composer ──────────────────────────────────────────────
+// Each eye is rendered separately through a dedicated composer, then blitted
+// to the XR render target. This lets GTAOPass run correctly per-eye.
+let vrComposer = null, vrRenderPass = null, vrGtaoPass = null;
+const vrBlitMat = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false });
+const vrBlitFSQ = new FullScreenQuad(vrBlitMat);
+
+function initVrComposer(eyeW, eyeH) {
+  if (vrComposer) return;
+  vrRenderPass = new RenderPass(scene, camera); // camera overridden per-eye at render time
+  vrGtaoPass   = new GTAOPass(scene, camera, eyeW, eyeH);
+  vrGtaoPass.output = GTAOPass.OUTPUT.Default;
+  vrComposer = new EffectComposer(renderer,
+    new THREE.WebGLRenderTarget(eyeW, eyeH, { type: THREE.HalfFloatType }));
+  vrComposer.addPass(vrRenderPass);
+  vrComposer.addPass(vrGtaoPass);
+  vrComposer.addPass(new OutputPass());
+  vrComposer.renderToScreen = false; // always blit manually
+  updateSSAO(); // sync current SSAO radius to vrGtaoPass
+}
+
 function updateSSAO() {
   // getYScale() is always 0.01 (1 cm = 0.01 m), so no pixelsPerCm guard needed.
   const aoCm = parseFloat(document.getElementById('ao-radius').value)||50;
   const r = aoCm * getYScale();
-  gtaoPass.updateGtaoMaterial({radius:r,distanceExponent:2,thickness:r*4,distanceFallOff:1,scale:1});
+  const p = {radius:r,distanceExponent:2,thickness:r*4,distanceFallOff:1,scale:1};
+  gtaoPass.updateGtaoMaterial(p);
+  if (vrGtaoPass) vrGtaoPass.updateGtaoMaterial(p);
 }
 document.getElementById('ao-radius').addEventListener('input',updateSSAO);
 
@@ -1665,10 +1689,35 @@ document.getElementById('wc-ceil-mat-btn').addEventListener('click',()=>{
 // setAnimationLoop is required for WebXR (replaces requestAnimationFrame).
 renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) {
-    // In VR: read controller input, render directly to XR framebuffer.
-    // EffectComposer targets an internal RT so we bypass it here.
     handleVRInput();
-    renderer.render(scene, camera);
+    const eyes = renderer.xr.getCamera().cameras;
+    if (eyes.length >= 2) {
+      // Per-eye SSAO: render each eye through the VR composer, then blit to XR RT.
+      // WebXRManager sets the XR RT as the current RT before our frame runs.
+      const xrRT = renderer.getRenderTarget();
+      const vp0  = eyes[0].viewport;
+      initVrComposer(Math.round(vp0.z), Math.round(vp0.w));
+      // Disable XR's ArrayCamera replacement so we drive each eye ourselves.
+      renderer.xr.enabled = false;
+      for (const eyeCam of eyes) {
+        const vp = eyeCam.viewport;
+        vrRenderPass.camera = eyeCam;
+        vrGtaoPass.camera   = eyeCam;
+        vrComposer.render(); // result → vrComposer.readBuffer
+        // Blit the eye's SSAO result to its viewport on the XR framebuffer.
+        renderer.setRenderTarget(xrRT);
+        renderer.setViewport(vp.x, vp.y, vp.z, vp.w);
+        renderer.setScissor(vp.x, vp.y, vp.z, vp.w);
+        renderer.setScissorTest(true);
+        vrBlitMat.map = vrComposer.readBuffer.texture;
+        vrBlitFSQ.render(renderer);
+        renderer.setScissorTest(false);
+      }
+      renderer.xr.enabled = true;
+    } else {
+      // Eye cameras not yet populated (first frame); fall back to direct render.
+      renderer.render(scene, camera);
+    }
   } else if (walkMode) {
     const sinY=Math.sin(walkYaw),cosY=Math.cos(walkYaw);
     let dx=0,dz=0;
