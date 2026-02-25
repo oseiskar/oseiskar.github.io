@@ -1642,7 +1642,15 @@ function handleVRInput() {
     if (src.handedness === 'right') {
       // Snap-turn: 45° per flick, wait for stick to return to centre before turning again
       if (Math.abs(ax) > 0.7 && !vrSnapCooldown) {
+        // camera.position is the XR-tracked head offset in rig-local space.
+        // Rotating the rig pivots the camera around the rig's origin, not the
+        // user's actual standing position.  Save the camera's world-XZ before
+        // rotating, then translate the rig to cancel the unwanted drift.
+        const camBefore = camera.position.clone().applyQuaternion(vrRig.quaternion);
         vrRig.rotateY(-Math.sign(ax) * (Math.PI / 4));
+        const camAfter = camera.position.clone().applyQuaternion(vrRig.quaternion);
+        vrRig.position.x += camBefore.x - camAfter.x;
+        vrRig.position.z += camBefore.z - camAfter.z;
         vrSnapCooldown = true;
       } else if (Math.abs(ax) < 0.3) {
         vrSnapCooldown = false;
@@ -1670,6 +1678,9 @@ document.getElementById('btn-vr').addEventListener('click', async () => {
       const sc=getScale(), md=Math.max(state.canvasW,state.canvasH)*sc;
       camera.position.set(0,md*0.85,md*0.85); camera.rotation.set(0,0,0);
       controls.target.set(0,0,0); controls.update();
+      // Resize composer back to display dimensions and restore mono camera
+      composer.setSize(renderer.domElement.width, renderer.domElement.height);
+      n8aoPass.camera = camera;
     });
     await renderer.xr.setSession(session);
     xrSession = session;
@@ -1702,10 +1713,32 @@ document.getElementById('wc-ceil-mat-btn').addEventListener('click',()=>{
 
 // ─── Render loop ──────────────────────────────────────────────────────────
 // setAnimationLoop is required for WebXR (replaces requestAnimationFrame).
+let _vrRTW = 0, _vrRTH = 0; // Track VR RT size for lazy composer resize
 renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) {
     handleVRInput();
-    renderer.render(scene, camera);
+    const xrRT = renderer.getRenderTarget();
+    if (xrRT) {
+      // Resize composer to full XR RT (both eyes side-by-side) when dimensions change
+      if (xrRT.width !== _vrRTW || xrRT.height !== _vrRTH) {
+        _vrRTW = xrRT.width; _vrRTH = xrRT.height;
+        composer.setSize(_vrRTW, _vrRTH);
+      }
+      // Use the XR ArrayCamera — Three.js renders both eye viewports automatically.
+      // Its projectionMatrix is the combined-frustum union used by N8AO's AO shaders.
+      const xrCamera = renderer.xr.getCamera();
+      n8aoPass.camera = xrCamera;
+      // Intercept OutputPass's setRenderTarget(null) → XR framebuffer so the
+      // composed result reaches the headset display instead of the canvas.
+      const _origSRT = renderer.setRenderTarget.bind(renderer);
+      renderer.setRenderTarget = (rt, ...a) => _origSRT(rt ?? xrRT, ...a);
+      composer.render();
+      renderer.setRenderTarget = _origSRT;
+      renderer.setRenderTarget(xrRT); // Restore XR RT for frame submission
+      n8aoPass.camera = camera;       // Restore for non-VR frames
+    } else {
+      renderer.render(scene, camera); // Fallback: no XR RT on very first frame
+    }
   } else if (walkMode) {
     const sinY=Math.sin(walkYaw),cosY=Math.cos(walkYaw);
     let dx=0,dz=0;
