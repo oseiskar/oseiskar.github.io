@@ -527,9 +527,7 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-    "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-    "n8ao": "https://esm.sh/n8ao@1.10.1?external=three,three/examples/jsm/postprocessing/Pass.js"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
   }
 }
 </script>
@@ -538,7 +536,8 @@
 import * as THREE from 'three';
 import { OrbitControls }           from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer }          from 'three/addons/postprocessing/EffectComposer.js';
-import { N8AOPass }               from 'n8ao';
+import { RenderPass }              from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass }                from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass }              from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFExporter }            from 'three/addons/exporters/GLTFExporter.js';
 import { XRControllerModelFactory} from 'three/addons/webxr/XRControllerModelFactory.js';
@@ -1396,19 +1395,20 @@ document.getElementById('floor-opacity').addEventListener('input',e=>{
   render2D();
 });
 
-// ─── N8AO + composer ──────────────────────────────────────────────────────
-// N8AOPass replaces the RenderPass — it renders the scene and AO in one pass.
+// ─── GTAOPass + composer ───────────────────────────────────────────────────
 const composer = new EffectComposer(renderer);
-const n8aoPass = new N8AOPass(scene, camera, 800, 600);
-n8aoPass.configuration.gammaCorrection = false; // OutputPass handles gamma
-composer.addPass(n8aoPass);
+composer.addPass(new RenderPass(scene, camera));
+const gtaoPass = new GTAOPass(scene, camera, 800, 600);
+gtaoPass.output = GTAOPass.OUTPUT.Default;
+composer.addPass(gtaoPass);
 composer.addPass(new OutputPass());
 
 function updateSSAO() {
   const aoCm = parseFloat(document.getElementById('ao-radius').value)||50;
   const str  = parseFloat(document.getElementById('ao-intensity').value)||5;
-  n8aoPass.configuration.aoRadius  = aoCm * getYScale(); // world units (metres)
-  n8aoPass.configuration.intensity  = str;
+  const r = aoCm * getYScale();
+  gtaoPass.updateGtaoMaterial({ radius: r, distanceExponent: 2, thickness: r * 4, distanceFallOff: 1, scale: 1 });
+  gtaoPass.blendIntensity = str;
 }
 document.getElementById('ao-radius').addEventListener('input',updateSSAO);
 document.getElementById('ao-intensity').addEventListener('input',updateSSAO);
@@ -1678,9 +1678,6 @@ document.getElementById('btn-vr').addEventListener('click', async () => {
       const sc=getScale(), md=Math.max(state.canvasW,state.canvasH)*sc;
       camera.position.set(0,md*0.85,md*0.85); camera.rotation.set(0,0,0);
       controls.target.set(0,0,0); controls.update();
-      // Resize composer back to display dimensions and restore mono camera
-      composer.setSize(renderer.domElement.width, renderer.domElement.height);
-      n8aoPass.camera = camera;
     });
     await renderer.xr.setSession(session);
     xrSession = session;
@@ -1713,32 +1710,10 @@ document.getElementById('wc-ceil-mat-btn').addEventListener('click',()=>{
 
 // ─── Render loop ──────────────────────────────────────────────────────────
 // setAnimationLoop is required for WebXR (replaces requestAnimationFrame).
-let _vrRTW = 0, _vrRTH = 0; // Track VR RT size for lazy composer resize
 renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) {
     handleVRInput();
-    const xrRT = renderer.getRenderTarget();
-    if (xrRT) {
-      // Resize composer to full XR RT (both eyes side-by-side) when dimensions change
-      if (xrRT.width !== _vrRTW || xrRT.height !== _vrRTH) {
-        _vrRTW = xrRT.width; _vrRTH = xrRT.height;
-        composer.setSize(_vrRTW, _vrRTH);
-      }
-      // Use the XR ArrayCamera — Three.js renders both eye viewports automatically.
-      // Its projectionMatrix is the combined-frustum union used by N8AO's AO shaders.
-      const xrCamera = renderer.xr.getCamera();
-      n8aoPass.camera = xrCamera;
-      // Intercept OutputPass's setRenderTarget(null) → XR framebuffer so the
-      // composed result reaches the headset display instead of the canvas.
-      const _origSRT = renderer.setRenderTarget.bind(renderer);
-      renderer.setRenderTarget = (rt, ...a) => _origSRT(rt ?? xrRT, ...a);
-      composer.render();
-      renderer.setRenderTarget = _origSRT;
-      renderer.setRenderTarget(xrRT); // Restore XR RT for frame submission
-      n8aoPass.camera = camera;       // Restore for non-VR frames
-    } else {
-      renderer.render(scene, camera); // Fallback: no XR RT on very first frame
-    }
+    renderer.render(scene, camera); // SSAO not applied in XR mode
   } else if (walkMode) {
     const sinY=Math.sin(walkYaw),cosY=Math.cos(walkYaw);
     let dx=0,dz=0;
