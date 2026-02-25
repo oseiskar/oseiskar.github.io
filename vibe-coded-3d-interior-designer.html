@@ -307,7 +307,7 @@
   <span class="tb-label" style="color:#60a5fa;">Advanced</span>
   <div class="divider"></div>
   <span class="tb-label">Brightness:</span>
-  <input type="range" class="tb-range" id="brightness" min="0.2" max="3" step="0.05" value="1.56">
+  <input type="range" class="tb-range" id="brightness" min="0" max="1.5" step="0.05" value="1.0">
   <div class="divider"></div>
   <span class="tb-label">Floor plan opacity:</span>
   <input type="range" class="tb-range" id="floor-opacity" min="0" max="1" step="0.05" value="0.25">
@@ -322,6 +322,10 @@
     <span class="tb-label">Bg color</span>
     <input type="color" id="bg-color" value="#e8f4fd" class="wc-color">
   </label>
+  <div class="divider"></div>
+  <label class="btn" for="env-map-upload" style="cursor:pointer" title="Load an equirectangular environment map (.hdr or any image)">&#127758; Env Map</label>
+  <input type="file" id="env-map-upload" accept=".hdr,image/*" hidden>
+  <button class="btn" id="env-map-clear" style="display:none" title="Remove environment map">&#10005; Env</button>
   <div class="divider"></div>
   <button class="btn" id="btn-export-glb">&#128196; Export GLB</button>
 </div>
@@ -414,6 +418,10 @@
         <span id="p-mat-label">—</span>
         <span style="font-size:10px;color:#9ca3af;margin-left:2px">&#9660;</span>
       </button>
+      <div class="divider"></div>
+      <span class="prop-lbl">Round:</span>
+      <input type="number" class="prop-num" id="p-round" step="1" min="0" value="0" title="Corner rounding radius in cm">
+      <span class="prop-lbl">cm</span>
       <div class="divider"></div>
     </div>
     <button class="btn" id="p-rot-cw"  title="Rotate 90° CW">&#10227; 90°</button>
@@ -541,9 +549,11 @@ import { GTAOPass }                from 'three/addons/postprocessing/GTAOPass.js
 import { OutputPass }              from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFExporter }            from 'three/addons/exporters/GLTFExporter.js';
 import { XRControllerModelFactory} from 'three/addons/webxr/XRControllerModelFactory.js';
+import { RGBELoader }              from 'three/addons/loaders/RGBELoader.js';
+import { RoundedBoxGeometry }      from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // ─── Material library ─────────────────────────────────────────────────────
-let materials = [];   // { id, name, type, color, metalness, roughness, opacity, texData, texScale }
+let materials = [];   // { id, name, type, color, metalness, roughness, opacity, texData, texScale, texAspect }
 let nextMatId  = 1;
 let defaultMatId = null; // matId to use for the next new box
 
@@ -559,6 +569,7 @@ function newMaterial(props = {}) {
     opacity:   props.opacity   ?? 1.0,
     texData:   props.texData   || null,
     texScale:  props.texScale  ?? 100,
+    texAspect: props.texAspect ?? 1,
   };
 }
 
@@ -758,6 +769,12 @@ function hitTest(x,y){
   for(let i=state.boxes.length-1;i>=0;i--){const b=state.boxes[i];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)return b;}
   return null;
 }
+// Returns ALL boxes under (x,y), topmost-first (reverse array order).
+function hitTestAll(x,y){
+  const hits=[];
+  for(let i=state.boxes.length-1;i>=0;i--){const b=state.boxes[i];if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)hits.push(b);}
+  return hits;
+}
 function snapXY(pos){
   if(!state.pixelsPerCm) return pos;
   return{x:Math.round(pos.x/state.pixelsPerCm)*state.pixelsPerCm,y:Math.round(pos.y/state.pixelsPerCm)*state.pixelsPerCm};
@@ -798,7 +815,16 @@ canvas.addEventListener('mousedown',e=>{
         else{state.selectedIds.add(hit.id);state.selectedId=hit.id;}
         updateSelectionUI();
       } else {
-        if(!state.selectedIds.has(hit.id)){state.selectedIds.clear();state.selectedIds.add(hit.id);state.selectedId=hit.id;updateSelectionUI();}
+        if(state.selectedIds.size===1){
+          // Check whether the currently-selected object is anywhere in the click stack.
+          // If so, cycle to the next one down (regardless of which is topmost).
+          const all=hitTestAll(pos.x,pos.y);
+          const si=all.findIndex(b=>b.id===state.selectedId);
+          if(si!==-1&&all.length>1){
+            const next=all[(si+1)%all.length];
+            state.selectedIds.clear();state.selectedIds.add(next.id);state.selectedId=next.id;updateSelectionUI();
+          } else if(!state.selectedIds.has(hit.id)){state.selectedIds.clear();state.selectedIds.add(hit.id);state.selectedId=hit.id;updateSelectionUI();}
+        } else if(!state.selectedIds.has(hit.id)){state.selectedIds.clear();state.selectedIds.add(hit.id);state.selectedId=hit.id;updateSelectionUI();}
         pushHistory();
         state.moveDrag={sx:pos.x,sy:pos.y,origPos:[...state.selectedIds].map(id=>{const b=state.boxes.find(b=>b.id===id);return{id,x:b.x,y:b.y};})};
       }
@@ -897,11 +923,12 @@ document.getElementById('dlg-real-len').addEventListener('keydown',e=>{
 // ─── Properties panel ─────────────────────────────────────────────────────
 const propsContent = document.getElementById('props-content');
 const propsHint    = document.getElementById('props-hint');
-const pW   = document.getElementById('p-w');
-const pH   = document.getElementById('p-h');
-const pMinZ = document.getElementById('p-minz');
-const pMaxZ = document.getElementById('p-maxz');
-const pInfo = document.getElementById('p-info');
+const pW     = document.getElementById('p-w');
+const pH     = document.getElementById('p-h');
+const pMinZ  = document.getElementById('p-minz');
+const pMaxZ  = document.getElementById('p-maxz');
+const pRound = document.getElementById('p-round');
+const pInfo  = document.getElementById('p-info');
 
 // Update a material swatch button to reflect a material's appearance
 function updateMatDisplay(mat, swatchEl, labelEl) {
@@ -920,6 +947,7 @@ function showProps(box) {
     pH.value = Math.round(box.h / state.pixelsPerCm);
   }
   pMinZ.value = box.minZ; pMaxZ.value = box.maxZ;
+  pRound.value = box.rounding ?? 0;
   const mat = getBoxMat(box);
   updateMatDisplay(mat, document.getElementById('p-mat-swatch'), document.getElementById('p-mat-label'));
 }
@@ -937,6 +965,7 @@ function onPropChange() {
   }
   box.minZ = parseFloat(pMinZ.value) || 0;
   box.maxZ = parseFloat(pMaxZ.value) || 0;
+  box.rounding = Math.max(0, parseFloat(pRound.value) || 0);
   defaultProps.minZ = box.minZ; defaultProps.maxZ = box.maxZ;
   syncBoxes3D(); render2D();
 }
@@ -945,6 +974,7 @@ pW.addEventListener('input', onPropChange);
 pH.addEventListener('input', onPropChange);
 pMinZ.addEventListener('input', onPropChange);
 pMaxZ.addEventListener('input', onPropChange);
+pRound.addEventListener('input', onPropChange);
 document.getElementById('p-delete').addEventListener('click', deleteSelected);
 
 // Material button → open picker
@@ -1099,13 +1129,13 @@ document.getElementById('btn-save').addEventListener('click', () => {
   }
 
   const payload = {
-    version: 7,
+    version: 8,
     canvasW: state.canvasW, canvasH: state.canvasH,
     floorSrc: state.floorSrc, nextId: state.nextId,
     textures,
     materials: materials.map(serializeMat),
     nextMatId,
-    boxes: state.boxes.map(b => ({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ,maxZ:b.maxZ,matId:b.matId})),
+    boxes: state.boxes.map(b => ({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ,maxZ:b.maxZ,matId:b.matId,rounding:b.rounding??0})),
     defaultProps: {...defaultProps},
     defaultMatId,
     envMat: { floor: serializeMat({...envMat.floor}), ceil: serializeMat({...envMat.ceil}) },
@@ -1114,6 +1144,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
     brightness: parseFloat(document.getElementById('brightness').value),
     aoRadius:   parseFloat(document.getElementById('ao-radius').value)||50,
     aoIntensity: parseFloat(document.getElementById('ao-intensity').value)||5,
+    envMap: envMapDataUrl,
     walkCam: { x:walkX, z:walkZ, yaw:walkYaw, pitch:walkPitch, fov:camera.fov },
   };
   const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
@@ -1254,6 +1285,11 @@ document.getElementById('btn-generate-example').addEventListener('click', genera
 function loadFromJSON(data) {
   for (const id of [...meshMap.keys()]) removeMesh(id);
   setSelected(null);
+  // Clear any active environment map so it doesn't bleed into the new scene
+  scene.environment = null;
+  if (envMapTexture) { envMapTexture.dispose(); envMapTexture = null; }
+  envMapDataUrl = null;
+  document.getElementById('env-map-clear').style.display = 'none';
 
   // v7+: textures are deduplicated into a top-level array; each material has
   // texRef instead of texData.  v6 files have texData inline — also handled.
@@ -1273,6 +1309,7 @@ function loadFromJSON(data) {
       id:b.id, x:b.x, y:b.y, w:b.w, h:b.h,
       minZ:b.minZ??0, maxZ:b.maxZ??250,
       matId: b.matId ?? (materials[0]?.id ?? 1),
+      rounding: b.rounding ?? 0,
     }));
   } else {
     // v5 or earlier — auto-create materials from box properties
@@ -1309,10 +1346,9 @@ function loadFromJSON(data) {
   document.getElementById('floor-opacity').value = state.floorOpacity;
 
   if (data.brightness != null) {
-    const v = data.brightness;
-    document.getElementById('brightness').value = v;
-    ambientLight.intensity=1.05*v; keyLight.intensity=1.65*v; fillLight.intensity=0.6*v;
+    document.getElementById('brightness').value = data.brightness;
   }
+  updateLighting(); // env map was cleared above, so classic mode is applied here
   if (data.defaultProps) Object.assign(defaultProps, data.defaultProps);
   if (data.envMat) {
     if (data.envMat.floor) { Object.assign(envMat.floor, resolveMat(data.envMat.floor)); updateMatDisplay(envMat.floor, document.getElementById('wc-floor-swatch'), null); }
@@ -1327,6 +1363,7 @@ function loadFromJSON(data) {
 
   if (data.aoRadius    != null) document.getElementById('ao-radius').value    = data.aoRadius;
   if (data.aoIntensity != null) document.getElementById('ao-intensity').value = data.aoIntensity;
+  if (data.envMap) applyEnvMap(data.envMap);
 
   const afterImage = () => {
     rebuildFloor(); setWalkSurfaces(); updateSSAO();
@@ -1347,6 +1384,55 @@ wrap.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xe8f4fd);
+
+// ─── Environment map (HDR reflections) ────────────────────────────────────
+let envMapTexture = null;
+let envMapDataUrl  = null;
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+
+function applyEnvMap(dataUrl) {
+  envMapDataUrl = dataUrl;
+  // Detect format from the data-URL MIME type.
+  // HDR files get application/octet-stream (or image/vnd.radiance) from the browser;
+  // regular images get image/png, image/jpeg, etc.
+  const mime = dataUrl.split(';')[0].slice(5); // 'data:MIME;base64,...' → 'MIME'
+  const isLDR = /^image\/(png|jpe?g|webp|avif|bmp|gif|tiff?|svg)/.test(mime);
+
+  function onTexture(texture) {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+    if (envMapTexture) envMapTexture.dispose();
+    envMapTexture = envMap;
+    scene.environment = envMap;
+    texture.dispose();
+    document.getElementById('env-map-clear').style.display = '';
+    updateLighting();
+  }
+
+  if (isLDR) {
+    const texture = new THREE.TextureLoader().load(dataUrl, onTexture);
+    texture.colorSpace = THREE.SRGBColorSpace; // ensure linear conversion in PMREM
+  } else {
+    new RGBELoader().load(dataUrl, onTexture);
+  }
+}
+
+document.getElementById('env-map-upload').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => applyEnvMap(ev.target.result);
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+document.getElementById('env-map-clear').addEventListener('click', () => {
+  scene.environment = null;
+  if (envMapTexture) { envMapTexture.dispose(); envMapTexture = null; }
+  envMapDataUrl = null;
+  document.getElementById('env-map-clear').style.display = 'none';
+  updateLighting();
+});
 const camera = new THREE.PerspectiveCamera(55,1,0.01,500);
 camera.position.set(0,10,12);
 const controls = new OrbitControls(camera,renderer.domElement);
@@ -1380,15 +1466,18 @@ for (let i = 0; i < 2; i++) {
   vrRig.add(grip);
 }
 
-const ambientLight = new THREE.AmbientLight(0xffffff,1.05*1.56); scene.add(ambientLight);
-const keyLight  = new THREE.DirectionalLight(0xffffff,1.65*1.56); keyLight.position.set(5,12,8);  scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0x8ab4f8,0.6*1.56);  fillLight.position.set(-6,4,-5); scene.add(fillLight);
+const ambientLight = new THREE.AmbientLight(0xffffff,1.05); scene.add(ambientLight);
+const keyLight  = new THREE.DirectionalLight(0xffffff,1.65); keyLight.position.set(5,12,8);  scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0x8ab4f8,0.6);  fillLight.position.set(-6,4,-5); scene.add(fillLight);
 
 document.getElementById('bg-color').addEventListener('input',e=>scene.background=new THREE.Color(e.target.value));
-document.getElementById('brightness').addEventListener('input',e=>{
-  const v=parseFloat(e.target.value);
-  ambientLight.intensity=1.05*v; keyLight.intensity=1.65*v; fillLight.intensity=0.6*v;
-});
+function updateLighting() {
+  const v = parseFloat(document.getElementById('brightness').value);
+  ambientLight.intensity = 1.05 * v;
+  keyLight.intensity     = 1.65 * v;
+  fillLight.intensity    = 0.6  * v;
+}
+document.getElementById('brightness').addEventListener('input', updateLighting);
 document.getElementById('floor-opacity').addEventListener('input',e=>{
   state.floorOpacity=parseFloat(e.target.value);
   if(floorMesh){const t=state.floorOpacity<0.999;floorMesh.material.opacity=state.floorOpacity;floorMesh.material.transparent=t;floorMesh.material.depthWrite=!t;floorMesh.material.needsUpdate=true;}
@@ -1449,19 +1538,22 @@ function getOrLoadTex(texData) {
 // Set per-face UV tiling directly in a BoxGeometry's UV buffer.
 // THREE.BoxGeometry emits faces in order: +X, -X, +Y, -Y, +Z, -Z.
 // Each face has 4 vertices (8 floats) with default UVs spanning (0,0)→(1,1).
-// Multiplying by the face's physical size / unitScale makes the texture tile
-// at a consistent real-world scale on every face without distortion.
-function applyBoxUVs(geo, w, h, d, unitScale) {
+// texScale (via unitScale) is the tile WIDTH in world units; aspect = imgW/imgH
+// preserves the original image proportions so 1 V unit = unitScale/aspect world units.
+function applyBoxUVs(geo, w, h, d, unitScale, aspect) {
+  aspect = aspect || 1;
   const attr = geo.attributes.uv;
   const arr  = attr.array;
-  // [uScale, vScale] per face — which axes span the face in UV space
+  // U always maps to the first listed physical dimension (= tile width = unitScale).
+  // V maps to the second dimension but one V tile = unitScale/aspect world units,
+  // so vScale = physicalSize * aspect / unitScale.
   const faceScales = [
-    [d / unitScale, h / unitScale],  // +X right:   depth  × height
-    [d / unitScale, h / unitScale],  // -X left:    depth  × height
-    [w / unitScale, d / unitScale],  // +Y top:     width  × depth
-    [w / unitScale, d / unitScale],  // -Y bottom:  width  × depth
-    [w / unitScale, h / unitScale],  // +Z front:   width  × height
-    [w / unitScale, h / unitScale],  // -Z back:    width  × height
+    [d / unitScale, h * aspect / unitScale],  // +X right:   depth × height
+    [d / unitScale, h * aspect / unitScale],  // -X left:    depth × height
+    [w / unitScale, d * aspect / unitScale],  // +Y top:     width × depth
+    [w / unitScale, d * aspect / unitScale],  // -Y bottom:  width × depth
+    [w / unitScale, h * aspect / unitScale],  // +Z front:   width × height
+    [w / unitScale, h * aspect / unitScale],  // -Z back:    width × height
   ];
   for (let f = 0; f < 6; f++) {
     const [su, sv] = faceScales[f];
@@ -1474,11 +1566,22 @@ function applyBoxUVs(geo, w, h, d, unitScale) {
   attr.needsUpdate = true;
 }
 
-// Build a BoxGeometry with UV-tiling already baked in for texture materials.
-function makeBoxGeo(w3, h, d3, mat) {
+// Build a box geometry, optionally with rounded corners.
+// roundingCm > 0 uses RoundedBoxGeometry; the radius is clamped so it never
+// exceeds half the shortest dimension (at that limit a cube becomes a sphere
+// and a flat box becomes a cylinder).
+function makeBoxGeo(w3, h, d3, mat, roundingCm) {
+  if (roundingCm > 0) {
+    const maxR = Math.min(w3, h, d3) / 2;
+    const r    = Math.min(roundingCm * getYScale(), maxR);
+    // More segments for higher rounding fraction → smoother sphere/cylinder
+    const frac = r / maxR; // 0..1
+    const segs = Math.max(2, Math.round(2 + frac * 8)); // 2..10
+    return new RoundedBoxGeometry(w3, h, d3, segs, r);
+  }
   const geo = new THREE.BoxGeometry(w3, h, d3);
   if (mat && mat.type === 'texture' && mat.texData) {
-    applyBoxUVs(geo, w3, h, d3, (mat.texScale || 100) * getYScale());
+    applyBoxUVs(geo, w3, h, d3, (mat.texScale || 100) * getYScale(), mat.texAspect ?? 1);
   }
   return geo;
 }
@@ -1527,14 +1630,15 @@ function syncBoxes3D() {
     const x3=b.x*sc+(b.w*sc)/2-fw/2, z3=b.y*sc+(b.h*sc)/2-fh/2;
     const y3=b.minZ*ysc+height/2, w3=b.w*sc, d3=b.h*sc;
     const mat = getBoxMat(b);
+    const rounding = b.rounding ?? 0;
     if (meshMap.has(b.id)) {
       const m=meshMap.get(b.id);
       m.geometry.dispose(); m.material.dispose();
-      m.geometry=makeBoxGeo(w3,height,d3,mat);
+      m.geometry=makeBoxGeo(w3,height,d3,mat,rounding);
       m.material=makeMeshMat(mat);
       m.position.set(x3,y3,z3);
     } else {
-      const mesh=new THREE.Mesh(makeBoxGeo(w3,height,d3,mat), makeMeshMat(mat));
+      const mesh=new THREE.Mesh(makeBoxGeo(w3,height,d3,mat,rounding), makeMeshMat(mat));
       mesh.position.set(x3,y3,z3); scene.add(mesh); meshMap.set(b.id,mesh);
     }
   }
@@ -1549,7 +1653,7 @@ function highlightSelected3D() {
 // ─── Resize ───────────────────────────────────────────────────────────────
 function onResize() {
   const w=wrap.clientWidth,h=wrap.clientHeight; if(!w||!h) return;
-  renderer.setSize(w,h); composer.setSize(w,h); n8aoPass.setSize(w,h);
+  renderer.setSize(w,h); composer.setSize(w,h); gtaoPass.setSize(w,h);
   camera.aspect=w/h; camera.updateProjectionMatrix();
 }
 new ResizeObserver(onResize).observe(wrap); onResize();
@@ -1760,7 +1864,8 @@ let _pickerCurId   = null;  // currently assigned matId
 let _envEditorCb   = null;  // (mat) → void, set when editing floor/ceiling directly
 let _libEditId     = null;  // null = env/inline edit; -1 = new lib mat; N = edit existing
 let _fromPicker    = false; // whether editor was opened from picker (show back btn)
-let _pendingTex    = null;  // base64 of uploaded texture (before save)
+let _pendingTex       = null;  // base64 of uploaded texture (before save)
+let _pendingTexAspect = 1;    // imgW/imgH of _pendingTex
 
 function closeMatModal() {
   document.getElementById('mat-modal').classList.remove('open');
@@ -1784,10 +1889,11 @@ function openMatPicker(currentMatId, cb) {
 
 // Open the editor directly for floor/ceiling (inline, not library)
 function openEnvMatEditor(mat, cb) {
-  _envEditorCb = cb;
-  _libEditId   = null;
-  _fromPicker  = false;
-  _pendingTex  = null;
+  _envEditorCb      = cb;
+  _libEditId        = null;
+  _fromPicker       = false;
+  _pendingTex       = null;
+  _pendingTexAspect = 1;
   populateEditor(mat);
   showCard('editor');
   document.getElementById('mat-modal').classList.add('open');
@@ -1795,11 +1901,12 @@ function openEnvMatEditor(mat, cb) {
 
 // Open editor for a library material (from picker or add-new)
 function openLibMatEditor(matId, fromPicker) {
-  _libEditId  = matId; // -1 = new
-  _fromPicker = fromPicker;
-  _pendingTex = null;
+  _libEditId        = matId; // -1 = new
+  _fromPicker       = fromPicker;
+  _pendingTex       = null;
+  _pendingTexAspect = 1;
   const mat = matId === -1
-    ? {name:`Material ${nextMatId}`,type:'color',color:'#cccccc',metalness:0.05,roughness:0.65,opacity:1,texData:null,texScale:100}
+    ? {name:`Material ${nextMatId}`,type:'color',color:'#cccccc',metalness:0.05,roughness:0.65,opacity:1,texData:null,texScale:100,texAspect:1}
     : getMat(matId);
   populateEditor(mat);
   showCard('editor');
@@ -1875,7 +1982,8 @@ function populateEditor(mat) {
   document.getElementById('mat-pr-rough').value   = rough; document.getElementById('mat-pr-rough-val').textContent   = rough.toFixed(2);
   document.getElementById('mat-pr-opacity').value = op;    document.getElementById('mat-pr-opacity-val').textContent = op.toFixed(2);
   document.getElementById('mat-tex-scale').value  = mat.texScale ?? 100;
-  _pendingTex = mat.texData || null;
+  _pendingTex       = mat.texData   || null;
+  _pendingTexAspect = mat.texAspect ?? 1;
   updateTexPreview(_pendingTex);
 }
 
@@ -1902,7 +2010,8 @@ function readEditorMat() {
             opacity:  parseFloat(document.getElementById('mat-pr-opacity').value),
             texData:null,texScale:100};
   return {name,type:'texture',color:'#888888',metalness:0,roughness:0.8,opacity:1,
-          texData:_pendingTex||null, texScale:parseFloat(document.getElementById('mat-tex-scale').value)||100};
+          texData:_pendingTex||null, texScale:parseFloat(document.getElementById('mat-tex-scale').value)||100,
+          texAspect:_pendingTexAspect};
 }
 
 // Tab clicks
@@ -1912,7 +2021,12 @@ document.querySelectorAll('.mat-tab').forEach(tab => tab.addEventListener('click
 document.getElementById('mat-tex-upload').addEventListener('change', e => {
   const file=e.target.files[0]; if(!file) return;
   const reader=new FileReader();
-  reader.onload=ev=>{ _pendingTex=ev.target.result; updateTexPreview(_pendingTex); };
+  reader.onload=ev=>{
+    _pendingTex=ev.target.result; updateTexPreview(_pendingTex);
+    const img=new Image();
+    img.onload=()=>{ _pendingTexAspect = img.naturalWidth / img.naturalHeight; };
+    img.src=ev.target.result;
+  };
   reader.readAsDataURL(file); e.target.value='';
 });
 
