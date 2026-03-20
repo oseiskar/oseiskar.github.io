@@ -120,8 +120,9 @@
     .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 
     #panel-3d { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    #three-wrap { flex: 1; overflow: hidden; }
+    #three-wrap { flex: 1; overflow: hidden; position: relative; }
     #three-wrap canvas { display: block; }
+    #slice-canvas { display: none; position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; background: #f8fafc; }
 
     #props-bar {
       flex-shrink: 0; background: #1f2937; border-top: 2px solid #374151;
@@ -293,6 +294,7 @@
   <h1>3D Room Designer</h1>
   <button class="btn active" id="btn-draw"   title="Draw box (D)">&#9632; Draw</button>
   <button class="btn"        id="btn-select" title="Select (S)">&#9654; Select</button>
+  <button class="btn"        id="btn-measure" title="Measure distance (M)">&#128207; Measure</button>
   <div class="divider"></div>
   <button class="btn danger" id="btn-delete" style="visibility:hidden" title="Delete (Del)">&#128465; Delete</button>
   <div class="divider"></div>
@@ -300,7 +302,7 @@
   <button class="btn" id="btn-save" title="Save project as JSON">&#128190; Save JSON</button>
   <div class="divider"></div>
   <button class="btn" id="btn-advanced" title="Advanced settings">&#9881; Advanced &#9660;</button>
-  <span class="hint">D/S = modes &nbsp;&#183;&nbsp; Del = delete &nbsp;&#183;&nbsp; Esc = cancel &nbsp;&#183;&nbsp; scroll = 2D zoom</span>
+  <span class="hint">D/S/M = modes &nbsp;&#183;&nbsp; Del = delete &nbsp;&#183;&nbsp; Esc = cancel &nbsp;&#183;&nbsp; scroll = 2D zoom</span>
 </div>
 
 <div id="advanced-bar" style="display:none;align-items:center;gap:8px;padding:5px 12px;background:#1a2436;border-bottom:1px solid #374151;flex-shrink:0;flex-wrap:wrap;">
@@ -374,6 +376,7 @@
         </span>
         <button class="btn" id="btn-walk">&#128694; Walk</button>
         <button class="btn" id="btn-vr" style="display:none" title="Enter VR (WebXR / Meta Quest)">&#x1F97D; VR</button>
+        <button class="btn" id="btn-slice" title="2D floor plan slice">&#9674; 2D</button>
       </span>
     </div>
     <div id="walk-env-row" style="display:none;padding:5px 10px;background:#1f2937;border-bottom:1px solid #374151;flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -389,7 +392,17 @@
       <input type="range" class="tb-range" id="wc-ceil-h" min="100" max="600" value="250" step="1">
       <span id="wc-ceil-h-val" class="tb-label">250 cm</span>
     </div>
-    <div id="three-wrap"></div>
+    <div id="slice-controls-row" style="display:none;padding:5px 10px;background:#1f2937;border-bottom:1px solid #374151;flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="tb-label" style="color:#60a5fa;">2D Slice</span>
+      <span class="divider"></span>
+      <span class="tb-label">Height:</span>
+      <input type="range" class="tb-range" id="slice-height" min="1" max="600" value="100" step="1" style="width:90px">
+      <span id="slice-height-val" class="tb-label">100 cm</span>
+      <span class="divider"></span>
+      <button class="btn" id="btn-export-svg" style="font-size:12px">&#11015; SVG</button>
+      <button class="btn" id="btn-export-png" style="font-size:12px">&#11015; PNG</button>
+    </div>
+    <div id="three-wrap"><canvas id="slice-canvas" style="display:none"></canvas></div>
   </div>
 </div>
 
@@ -431,6 +444,12 @@
     <div class="divider"></div>
     <button class="btn danger" id="p-delete">&#128465; Delete</button>
     <span id="p-info"></span>
+  </div>
+  <div id="m-props" style="display:none;align-items:center;gap:10px;">
+    <span class="prop-lbl" id="m-length-label">Measure</span>
+    <div class="divider"></div>
+    <span class="prop-lbl">Color:</span>
+    <input type="color" id="m-color" value="#f59e0b" class="wc-color">
   </div>
 </div>
 
@@ -608,6 +627,7 @@ const state = {
   viewZoom: 1, viewPanX: 0, viewPanY: 0,
   scaleDrag: null, scaleLine: null, pendingScale: null,
   pixelsPerCm: null, floorOpacity: 0.25,
+  measureLines: [], measureDrag: null, selectedMeasureIdx: null, defaultMeasureColor: '#f59e0b',
 };
 
 // ─── Undo ─────────────────────────────────────────────────────────────────
@@ -744,9 +764,11 @@ function render2D() {
     ctx.globalAlpha=1; ctx.strokeStyle='#60a5fa'; ctx.lineWidth=lw1;
     ctx.setLineDash([4*lw1,3*lw1]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
   }
-  if(state.scaleLine){const{x1,y1,x2,y2}=state.scaleLine;drawScaleLine(x1,y1,x2,y2,'#34d399',true);}
   if(state.scaleDrag){const{sx,sy,cx,cy}=state.scaleDrag;drawScaleLine(sx,sy,cx,cy,'#34d399',false);}
+  for(let i=0;i<state.measureLines.length;i++){const ml=state.measureLines[i];drawMeasureLine(ml.x1,ml.y1,ml.x2,ml.y2,false,i===state.selectedMeasureIdx,ml.color);}
+  if(state.measureDrag){const{sx,sy,cx,cy}=state.measureDrag;const s=snapMeasureAngle(sx,sy,cx,cy);drawMeasureLine(sx,sy,s.cx,s.cy,true,false);}
   ctx.restore();
+  if(typeof sliceMode!=='undefined'&&sliceMode) renderSlice();
 }
 
 function drawScaleLine(x1,y1,x2,y2,color,showLabel){
@@ -759,6 +781,38 @@ function drawScaleLine(x1,y1,x2,y2,color,showLabel){
   ctx.font=`${11/state.viewZoom}px system-ui`; ctx.fillStyle=color; ctx.globalAlpha=1;
   if(showLabel&&state.pixelsPerCm) ctx.fillText(`${(len/state.pixelsPerCm).toFixed(0)} cm`,(x1+x2)/2+6/state.viewZoom,(y1+y2)/2-6/state.viewZoom);
   else ctx.fillText(`${Math.round(len)} px`,(x1+x2)/2+6/state.viewZoom,(y1+y2)/2-6/state.viewZoom);
+}
+function drawMeasureLine(x1,y1,x2,y2,isPreview,isSelected,lineColor){
+  const len=Math.hypot(x2-x1,y2-y1); if(len<1) return;
+  const lw=1/state.viewZoom,tick=9/state.viewZoom;
+  const color=isPreview?'#fde68a':isSelected?'#facc15':(lineColor||state.defaultMeasureColor);
+  const fontSize=12/state.viewZoom;
+  const label=state.pixelsPerCm?`${(len/state.pixelsPerCm).toFixed(0)} cm`:`${Math.round(len)} px`;
+  ctx.font=`bold ${fontSize}px system-ui`;
+  const textW=ctx.measureText(label).width;
+  const pad=6/state.viewZoom;
+  const gapHalf=textW/2+pad;
+  const ux=(x2-x1)/len,uy=(y2-y1)/len;
+  const mx=(x1+x2)/2,my=(y1+y2)/2;
+  ctx.strokeStyle=color; ctx.lineWidth=(isSelected?3:2)*lw;
+  // Two segments leaving a gap at the midpoint for the label
+  if(len>gapHalf*2+4/state.viewZoom){
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(mx-ux*gapHalf,my-uy*gapHalf);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mx+ux*gapHalf,my+uy*gapHalf);ctx.lineTo(x2,y2);ctx.stroke();
+  } else {
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  }
+  // Tick marks at endpoints
+  const nx=-uy*tick,ny=ux*tick;
+  [[x1,y1],[x2,y2]].forEach(([px,py])=>{ctx.beginPath();ctx.moveTo(px+nx,py+ny);ctx.lineTo(px-nx,py-ny);ctx.stroke();});
+  if(isSelected){
+    [[x1,y1],[x2,y2]].forEach(([px,py])=>{ctx.beginPath();ctx.arc(px,py,4*lw,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();});
+  }
+  // Label centered exactly at midpoint
+  ctx.fillStyle=color; ctx.globalAlpha=1;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(label,mx,my);
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 }
 
 function canvasXY(e){
@@ -778,6 +832,41 @@ function hitTestAll(x,y){
 function snapXY(pos){
   if(!state.pixelsPerCm) return pos;
   return{x:Math.round(pos.x/state.pixelsPerCm)*state.pixelsPerCm,y:Math.round(pos.y/state.pixelsPerCm)*state.pixelsPerCm};
+}
+// Snap measure line endpoint to horizontal or vertical if within 5°
+function snapMeasureAngle(sx,sy,cx,cy){
+  const dx=cx-sx,dy=cy-sy;
+  if(dx===0&&dy===0) return{cx,cy};
+  const deg=Math.abs(Math.atan2(dy,dx)*180/Math.PI);
+  if(deg<=5||deg>=175) return{cx,cy:sy};          // nearly horizontal
+  if(Math.abs(deg-90)<=5) return{cx:sx,cy};        // nearly vertical
+  return{cx,cy};
+}
+function pointToSegDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
+  if(len2===0) return Math.hypot(px-x1,py-y1);
+  const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/len2));
+  return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));
+}
+function syncDeleteBtn(){
+  const show = state.selectedIds.size > 0 || state.selectedMeasureIdx !== null;
+  document.getElementById('btn-delete').style.visibility = show ? '' : 'hidden';
+  syncMeasurePropsUI();
+}
+function syncMeasurePropsUI(){
+  const mProps = document.getElementById('m-props'); if(!mProps) return;
+  if(state.selectedMeasureIdx !== null && state.selectedMeasureIdx < state.measureLines.length){
+    const ml = state.measureLines[state.selectedMeasureIdx];
+    const d = Math.hypot(ml.x2-ml.x1, ml.y2-ml.y1);
+    const lenStr = state.pixelsPerCm ? `${(d/state.pixelsPerCm).toFixed(0)} cm` : `${Math.round(d)} px`;
+    document.getElementById('m-length-label').textContent = `Measure: ${lenStr}`;
+    document.getElementById('m-color').value = ml.color || state.defaultMeasureColor;
+    propsHint.style.display = 'none';
+    propsContent.classList.add('hidden');
+    mProps.style.display = 'flex';
+  } else {
+    mProps.style.display = 'none';
+  }
 }
 
 canvasWrap.addEventListener('wheel',e=>{
@@ -810,6 +899,7 @@ canvas.addEventListener('mousedown',e=>{
   } else if(state.mode==='select'){
     const hit=hitTest(pos.x,pos.y);
     if(hit){
+      state.selectedMeasureIdx=null;
       if(e.shiftKey){
         if(state.selectedIds.has(hit.id)){state.selectedIds.delete(hit.id);state.selectedId=[...state.selectedIds].at(-1)??null;}
         else{state.selectedIds.add(hit.id);state.selectedId=hit.id;}
@@ -829,11 +919,24 @@ canvas.addEventListener('mousedown',e=>{
         state.moveDrag={sx:pos.x,sy:pos.y,origPos:[...state.selectedIds].map(id=>{const b=state.boxes.find(b=>b.id===id);return{id,x:b.x,y:b.y};})};
       }
     } else {
-      if(!e.shiftKey){state.selectedIds.clear();state.selectedId=null;updateSelectionUI();}
-      state.rubberBand={sx:pos.x,sy:pos.y,cx:pos.x,cy:pos.y};
+      const mThresh=8/state.viewZoom;
+      const mIdx=state.measureLines.findIndex(ml=>pointToSegDist(pos.x,pos.y,ml.x1,ml.y1,ml.x2,ml.y2)<mThresh);
+      if(mIdx>=0){
+        state.selectedMeasureIdx=state.selectedMeasureIdx===mIdx?null:mIdx;
+        if(!e.shiftKey){state.selectedIds.clear();state.selectedId=null;updateSelectionUI();}
+        else syncDeleteBtn();
+        render2D();
+      } else {
+        state.selectedMeasureIdx=null;
+        if(!e.shiftKey){state.selectedIds.clear();state.selectedId=null;updateSelectionUI();}
+        else syncDeleteBtn();
+        state.rubberBand={sx:pos.x,sy:pos.y,cx:pos.x,cy:pos.y};
+      }
     }
   } else if(state.mode==='scale'){
     state.scaleDrag={sx:pos.x,sy:pos.y,cx:pos.x,cy:pos.y};
+  } else if(state.mode==='measure'){
+    const ms=snapXY(pos); state.measureDrag={sx:ms.x,sy:ms.y,cx:ms.x,cy:ms.y};
   }
 });
 
@@ -847,6 +950,7 @@ canvas.addEventListener('mousemove',e=>{
       syncBoxes3D();render2D();
     } else if(state.rubberBand){state.rubberBand.cx=pos.x;state.rubberBand.cy=pos.y;render2D();}
   } else if(state.mode==='scale'&&state.scaleDrag){state.scaleDrag.cx=pos.x;state.scaleDrag.cy=pos.y;render2D();}
+  else if(state.mode==='measure'&&state.measureDrag){const ms=snapXY(pos);state.measureDrag.cx=ms.x;state.measureDrag.cy=ms.y;render2D();}
 });
 
 canvas.addEventListener('mouseup',e=>{
@@ -872,6 +976,23 @@ canvas.addEventListener('mouseup',e=>{
     if(len>5){state.pendingScale={x1:sx,y1:sy,x2:cx,y2:cy};openScaleDialog(len);}
     render2D();
   }
+  if(state.mode==='measure'&&state.measureDrag){
+    const{sx,sy,cx,cy}=state.measureDrag; state.measureDrag=null;
+    const s=snapMeasureAngle(sx,sy,cx,cy);
+    const len=Math.hypot(s.cx-sx,s.cy-sy);
+    if(len*state.viewZoom>5){
+      const newIdx=state.measureLines.length;
+      state.measureLines.push({x1:sx,y1:sy,x2:s.cx,y2:s.cy,color:state.defaultMeasureColor});
+      state.selectedMeasureIdx=newIdx;
+    } else {
+      // single click: select/deselect nearby line
+      const threshold=8/state.viewZoom;
+      const cp=canvasXY(e);
+      const idx=state.measureLines.findIndex(ml=>pointToSegDist(cp.x,cp.y,ml.x1,ml.y1,ml.x2,ml.y2)<threshold);
+      state.selectedMeasureIdx=idx>=0?(state.selectedMeasureIdx===idx?null:idx):null;
+    }
+    syncDeleteBtn(); render2D();
+  }
 });
 
 canvas.addEventListener('mouseleave',()=>{
@@ -879,6 +1000,7 @@ canvas.addEventListener('mouseleave',()=>{
   if(state.scaleDrag){state.scaleDrag=null;render2D();}
   if(state.moveDrag){state.moveDrag=null;syncBoxes3D();render2D();}
   if(state.rubberBand){state.rubberBand=null;render2D();}
+  if(state.measureDrag){state.measureDrag=null;render2D();}
 });
 
 // ─── Create box ───────────────────────────────────────────────────────────
@@ -912,7 +1034,8 @@ document.getElementById('dlg-ok').addEventListener('click',()=>{
   const{x1,y1,x2,y2}=state.pendingScale;
   state.pixelsPerCm=Math.hypot(x2-x1,y2-y1)/cm;
   state.scaleLine=state.pendingScale;
-  closeScaleDialog(); updateSSAO(); syncBoxes3D(); render2D(); enterPhase('main');
+  state.measureLines.push({x1,y1,x2,y2,color:'#34d399'});
+  closeScaleDialog(); updateSSAO(); rebuildFloor(); setWalkSurfaces(); render2D(); enterPhase('main');
 });
 document.getElementById('dlg-cancel').addEventListener('click',()=>{closeScaleDialog();state.scaleDrag=null;render2D();});
 document.getElementById('dlg-real-len').addEventListener('keydown',e=>{
@@ -993,14 +1116,12 @@ document.getElementById('p-mat-btn').addEventListener('click', () => {
 function updateSelectionUI() {
   const count  = state.selectedIds.size;
   const box    = state.boxes.find(b => b.id === state.selectedId);
-  const delBtn = document.getElementById('btn-delete');
   const pSingle = document.getElementById('p-single');
 
   if (count === 0) {
-    hideProps(); delBtn.style.visibility = 'hidden';
+    hideProps();
   } else {
     propsHint.style.display = 'none'; propsContent.classList.remove('hidden');
-    delBtn.style.visibility = '';
     if (count === 1 && box) {
       pSingle.style.display = 'flex';
       showProps(box);
@@ -1012,7 +1133,7 @@ function updateSelectionUI() {
       pInfo.textContent = `${count} boxes selected`;
     }
   }
-  highlightSelected3D(); render2D();
+  syncDeleteBtn(); highlightSelected3D(); render2D();
 }
 
 function setSelected(id) {
@@ -1022,6 +1143,11 @@ function setSelected(id) {
 }
 
 function deleteSelected() {
+  if (state.selectedMeasureIdx !== null) {
+    state.measureLines.splice(state.selectedMeasureIdx, 1);
+    state.selectedMeasureIdx = null;
+    syncDeleteBtn(); render2D();
+  }
   if (!state.selectedIds.size) return;
   pushHistory();
   for (const id of state.selectedIds) removeMesh(id);
@@ -1033,18 +1159,28 @@ function deleteSelected() {
 // ─── Mode ─────────────────────────────────────────────────────────────────
 function setMode(newMode) {
   state.mode = newMode;
-  state.drag = null; state.scaleDrag = null; state.moveDrag = null; state.rubberBand = null;
+  state.drag = null; state.scaleDrag = null; state.moveDrag = null; state.rubberBand = null; state.measureDrag = null;
+  state.selectedMeasureIdx = null; syncDeleteBtn();
   if (newMode !== 'scale' && scaleDialog.style.display !== 'none') closeScaleDialog();
-  canvas.style.cursor = {draw:'crosshair',select:'default',scale:'crosshair'}[newMode] || 'default';
-  ['btn-draw','btn-select'].forEach(id => {
+  canvas.style.cursor = {draw:'crosshair',select:'default',scale:'crosshair',measure:'crosshair'}[newMode] || 'default';
+  ['btn-draw','btn-select','btn-measure'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
-    el.classList.toggle('active',(id==='btn-draw'&&newMode==='draw')||(id==='btn-select'&&newMode==='select'));
+    el.classList.toggle('active',
+      (id==='btn-draw'&&newMode==='draw')||
+      (id==='btn-select'&&newMode==='select')||
+      (id==='btn-measure'&&newMode==='measure'));
   });
   render2D();
 }
 
 document.getElementById('btn-draw')  .addEventListener('click', ()=>setMode('draw'));
 document.getElementById('btn-select').addEventListener('click', ()=>setMode('select'));
+document.getElementById('btn-measure').addEventListener('click', ()=>setMode('measure'));
+document.getElementById('m-color').addEventListener('input', e=>{
+  if(state.selectedMeasureIdx===null) return;
+  const ml=state.measureLines[state.selectedMeasureIdx];
+  ml.color=e.target.value; state.defaultMeasureColor=e.target.value; render2D();
+});
 document.getElementById('btn-delete').addEventListener('click', deleteSelected);
 document.getElementById('btn-advanced').addEventListener('click', ()=>{
   const bar = document.getElementById('advanced-bar');
@@ -1140,6 +1276,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
     defaultMatId,
     envMat: { floor: serializeMat({...envMat.floor}), ceil: serializeMat({...envMat.ceil}) },
     scaleLine: state.scaleLine, pixelsPerCm: state.pixelsPerCm,
+    measureLines: state.measureLines,
     floorOpacity: state.floorOpacity,
     brightness: parseFloat(document.getElementById('brightness').value),
     aoRadius:   parseFloat(document.getElementById('ao-radius').value)||50,
@@ -1342,6 +1479,13 @@ function loadFromJSON(data) {
   state.floorSrc = data.floorSrc || null;
   state.scaleLine = data.scaleLine || null;
   state.pixelsPerCm = data.pixelsPerCm || data.pixelsPerRealUnit || null;
+  state.measureLines = data.measureLines || [];
+  if (state.scaleLine) {
+    const sl=state.scaleLine;
+    const already=state.measureLines.some(m=>m.x1===sl.x1&&m.y1===sl.y1&&m.x2===sl.x2&&m.y2===sl.y2);
+    if (!already) state.measureLines.push({x1:sl.x1,y1:sl.y1,x2:sl.x2,y2:sl.y2,color:'#34d399'});
+  }
+  state.selectedMeasureIdx = null;
   state.floorOpacity = data.floorOpacity ?? 1;
   document.getElementById('floor-opacity').value = state.floorOpacity;
 
@@ -1680,6 +1824,7 @@ function walkAltWorld() {
 }
 
 function toggleWalkMode() {
+  if (!walkMode && sliceMode) exitSliceMode();
   walkMode=!walkMode;
   const btn=document.getElementById('btn-walk');
   const altRow=document.getElementById('walk-alt-row');
@@ -1704,6 +1849,256 @@ function toggleWalkMode() {
   }
 }
 document.getElementById('btn-walk').addEventListener('click',toggleWalkMode);
+
+// ─── 2D Slice mode ────────────────────────────────────────────────────────
+let sliceMode = false;
+let sliceHeight = 100;
+let sliceZoom = 1, slicePanX = 0, slicePanY = 0;
+let slicePanning = false, slicePanSX = 0, slicePanSY = 0, slicePanOX = 0, slicePanOY = 0;
+const sliceCanvas = document.getElementById('slice-canvas');
+const sliceCtx = sliceCanvas.getContext('2d');
+
+// Polygon union of axis-aligned rectangles → list of ring coordinate arrays.
+// Uses coordinate compression + directed boundary edge tracing (leftmost-turn / CCW rule).
+function computeUnionPolygons(rects) {
+  if (!rects.length) return [];
+  const xs = [...new Set(rects.flatMap(r => [r.x, r.x+r.w]))].sort((a,b)=>a-b);
+  const ys = [...new Set(rects.flatMap(r => [r.y, r.y+r.h]))].sort((a,b)=>a-b);
+  const NX = xs.length-1, NY = ys.length-1;
+  if (NX<=0||NY<=0) return [];
+  // Occupancy grid
+  const occ = new Uint8Array(NX*NY);
+  for (const r of rects) {
+    const x0=xs.indexOf(r.x), x1=xs.indexOf(r.x+r.w);
+    const y0=ys.indexOf(r.y), y1=ys.indexOf(r.y+r.h);
+    for (let xi=x0;xi<x1;xi++) for (let yi=y0;yi<y1;yi++) occ[xi*NY+yi]=1;
+  }
+  const isOcc=(xi,yi)=>xi>=0&&xi<NX&&yi>=0&&yi<NY&&occ[xi*NY+yi]===1;
+  // Directed boundary edges
+  const edgeMap = new Map();
+  const push=(x1,y1,x2,y2)=>{
+    const k=`${x1},${y1}`; if(!edgeMap.has(k)) edgeMap.set(k,[]);
+    edgeMap.get(k).push({x:x2,y:y2,used:false});
+  };
+  for (let yi=0;yi<=NY;yi++) for (let xi=0;xi<NX;xi++) {
+    const a=isOcc(xi,yi-1), b=isOcc(xi,yi);
+    if (!a&&b) push(xs[xi],ys[yi],xs[xi+1],ys[yi]);
+    else if (a&&!b) push(xs[xi+1],ys[yi],xs[xi],ys[yi]);
+  }
+  for (let xi=0;xi<=NX;xi++) for (let yi=0;yi<NY;yi++) {
+    const a=isOcc(xi-1,yi), b=isOcc(xi,yi);
+    if (a&&!b) push(xs[xi],ys[yi],xs[xi],ys[yi+1]);
+    else if (!a&&b) push(xs[xi],ys[yi+1],xs[xi],ys[yi]);
+  }
+  // Trace polygons: at each node, take the edge making the largest left-turn angle
+  const polys = [];
+  for (const [fk, edgeList] of edgeMap) {
+    for (const startEdge of edgeList) {
+      if (startEdge.used) continue;
+      startEdge.used = true;
+      const [x0,y0] = fk.split(',').map(Number);
+      const poly = [[x0,y0]];
+      let cx=x0,cy=y0, ex=startEdge.x,ey=startEdge.y, dx=ex-cx,dy=ey-cy;
+      for (let iter=0; (ex!==x0||ey!==y0)&&iter<10000; iter++) {
+        poly.push([ex,ey]);
+        const nexts=(edgeMap.get(`${ex},${ey}`)||[]).filter(e=>!e.used);
+        if (!nexts.length) break;
+        let best=null, bestAng=-Infinity;
+        for (const e of nexts) {
+          const ndx=e.x-ex, ndy=e.y-ey;
+          const ang=Math.atan2(dx*ndy-dy*ndx, dx*ndx+dy*ndy);
+          if (ang>bestAng){bestAng=ang;best=e;}
+        }
+        if (!best) break;
+        best.used=true; dx=best.x-ex; dy=best.y-ey; cx=ex;cy=ey; ex=best.x;ey=best.y;
+      }
+      if (poly.length>=4) polys.push(poly);
+    }
+  }
+  return polys;
+}
+
+function sliceBoxesAtHeight() {
+  if (!state.pixelsPerCm) return [];
+  return state.boxes.filter(b => b.minZ <= sliceHeight && b.maxZ > sliceHeight);
+}
+
+function fitSliceToView() {
+  const cssW=sliceCanvas.clientWidth, cssH=sliceCanvas.clientHeight;
+  if (!cssW||!cssH) return;
+  const margin=40;
+  sliceZoom=Math.min((cssW-margin)/state.canvasW,(cssH-margin)/state.canvasH);
+  slicePanX=(cssW-state.canvasW*sliceZoom)/2;
+  slicePanY=(cssH-state.canvasH*sliceZoom)/2;
+}
+
+function renderSliceScene(sc, zoom) {
+  const lw=1/zoom, cW=state.canvasW, cH=state.canvasH;
+  sc.fillStyle='#ffffff'; sc.fillRect(0,0,cW,cH);
+  // Polygon unions per material
+  const boxes=sliceBoxesAtHeight(), byMat=new Map();
+  for (const b of boxes) { if(!byMat.has(b.matId)) byMat.set(b.matId,[]); byMat.get(b.matId).push({x:b.x,y:b.y,w:b.w,h:b.h}); }
+  for (const [matId, rects] of byMat) {
+    const polys=computeUnionPolygons(rects); if(!polys.length) continue;
+    sc.beginPath();
+    for (const poly of polys) {
+      sc.moveTo(poly[0][0],poly[0][1]);
+      for (let i=1;i<poly.length;i++) sc.lineTo(poly[i][0],poly[i][1]);
+      sc.closePath();
+    }
+    sc.fillStyle=matDisplayColor(getMat(matId)); sc.fill('evenodd');
+    sc.strokeStyle='#374151'; sc.lineWidth=1.5*lw; sc.stroke();
+  }
+  // Measure lines
+  for (let i=0;i<state.measureLines.length;i++) {
+    const ml=state.measureLines[i], {x1,y1,x2,y2}=ml;
+    const len=Math.hypot(x2-x1,y2-y1); if(len<1) continue;
+    const color=i===state.selectedMeasureIdx?'#facc15':(ml.color||state.defaultMeasureColor);
+    const fontSize=12*lw;
+    const label=state.pixelsPerCm?`${(len/state.pixelsPerCm).toFixed(0)} cm`:`${Math.round(len)} px`;
+    sc.font=`bold ${fontSize}px system-ui`;
+    const textW=sc.measureText(label).width, gapHalf=textW/2+6*lw;
+    const ux=(x2-x1)/len, uy=(y2-y1)/len, mx=(x1+x2)/2, my=(y1+y2)/2;
+    const nx=-uy*9*lw, ny=ux*9*lw;
+    sc.strokeStyle=color; sc.lineWidth=2*lw;
+    if (len>gapHalf*2+4*lw) {
+      sc.beginPath();sc.moveTo(x1,y1);sc.lineTo(mx-ux*gapHalf,my-uy*gapHalf);sc.stroke();
+      sc.beginPath();sc.moveTo(mx+ux*gapHalf,my+uy*gapHalf);sc.lineTo(x2,y2);sc.stroke();
+    } else { sc.beginPath();sc.moveTo(x1,y1);sc.lineTo(x2,y2);sc.stroke(); }
+    [[x1,y1],[x2,y2]].forEach(([px,py])=>{sc.beginPath();sc.moveTo(px+nx,py+ny);sc.lineTo(px-nx,py-ny);sc.stroke();});
+    sc.fillStyle=color; sc.globalAlpha=1;
+    sc.textAlign='center'; sc.textBaseline='middle'; sc.fillText(label,mx,my);
+    sc.textAlign='left'; sc.textBaseline='alphabetic';
+  }
+  sc.strokeStyle='#94a3b8'; sc.lineWidth=lw; sc.strokeRect(0,0,cW,cH);
+}
+
+function renderSlice() {
+  if (!sliceMode) return;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const cssW=sliceCanvas.clientWidth, cssH=sliceCanvas.clientHeight;
+  const physW=Math.round(cssW*dpr), physH=Math.round(cssH*dpr);
+  if (sliceCanvas.width!==physW||sliceCanvas.height!==physH){sliceCanvas.width=physW;sliceCanvas.height=physH;}
+  const sc=sliceCtx;
+  sc.clearRect(0,0,physW,physH);
+  sc.save(); sc.scale(dpr,dpr); sc.translate(slicePanX,slicePanY); sc.scale(sliceZoom,sliceZoom);
+  renderSliceScene(sc,sliceZoom);
+  sc.restore();
+}
+
+function enterSliceMode() {
+  if (walkMode) toggleWalkMode();
+  sliceMode=true;
+  renderer.domElement.style.display='none';
+  sliceCanvas.style.display='block';
+  document.getElementById('slice-controls-row').style.display='flex';
+  document.getElementById('btn-slice').classList.add('active');
+  fitSliceToView(); renderSlice();
+}
+function exitSliceMode() {
+  sliceMode=false;
+  renderer.domElement.style.display='';
+  sliceCanvas.style.display='none';
+  document.getElementById('slice-controls-row').style.display='none';
+  document.getElementById('btn-slice').classList.remove('active');
+}
+
+document.getElementById('btn-slice').addEventListener('click',()=>{ if(sliceMode) exitSliceMode(); else enterSliceMode(); });
+
+const sliceHeightInput=document.getElementById('slice-height');
+const sliceHeightVal=document.getElementById('slice-height-val');
+sliceHeightInput.addEventListener('input',()=>{
+  sliceHeight=parseFloat(sliceHeightInput.value);
+  sliceHeightVal.textContent=sliceHeight+' cm';
+  renderSlice();
+});
+
+// Zoom + pan for slice canvas
+sliceCanvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=sliceCanvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const fpx=(mx-slicePanX)/sliceZoom, fpy=(my-slicePanY)/sliceZoom;
+  const f=e.deltaY<0?1.15:1/1.15;
+  sliceZoom=Math.max(0.05,Math.min(20,sliceZoom*f));
+  slicePanX=mx-fpx*sliceZoom; slicePanY=my-fpy*sliceZoom;
+  renderSlice();
+},{passive:false});
+sliceCanvas.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  slicePanning=true; slicePanSX=e.clientX; slicePanSY=e.clientY;
+  slicePanOX=slicePanX; slicePanOY=slicePanY; sliceCanvas.style.cursor='grabbing';
+});
+window.addEventListener('mousemove',e=>{
+  if(!slicePanning) return;
+  slicePanX=slicePanOX+(e.clientX-slicePanSX); slicePanY=slicePanOY+(e.clientY-slicePanSY);
+  renderSlice();
+});
+window.addEventListener('mouseup',()=>{ if(slicePanning){slicePanning=false;sliceCanvas.style.cursor='grab';} });
+new ResizeObserver(()=>{ if(sliceMode){fitSliceToView();renderSlice();} }).observe(wrap);
+
+// ─── SVG export ───────────────────────────────────────────────────────────
+document.getElementById('btn-export-svg').addEventListener('click',()=>{
+  const ppc=state.pixelsPerCm; if(!ppc){alert('Set the scale first.');return;}
+  const cssW=sliceCanvas.clientWidth, cssH=sliceCanvas.clientHeight;
+  const vx0=(-slicePanX/sliceZoom)/ppc, vy0=(-slicePanY/sliceZoom)/ppc;
+  const vW=(cssW/sliceZoom)/ppc,  vH=(cssH/sliceZoom)/ppc;
+  const f4=n=>n.toFixed(3);
+  let body=`<rect x="${f4(vx0)}" y="${f4(vy0)}" width="${f4(vW)}" height="${f4(vH)}" fill="white"/>\n`;
+  const boxes=sliceBoxesAtHeight(), byMat=new Map();
+  for (const b of boxes){ if(!byMat.has(b.matId)) byMat.set(b.matId,[]); byMat.get(b.matId).push({x:b.x,y:b.y,w:b.w,h:b.h}); }
+  for (const [matId,rects] of byMat) {
+    const col=matDisplayColor(getMat(matId));
+    const polys=computeUnionPolygons(rects); if(!polys.length) continue;
+    const d=polys.map(poly=>{
+      const pts=poly.map(([x,y])=>`${(x/ppc).toFixed(3)},${(y/ppc).toFixed(3)}`);
+      return `M ${pts.join(' L ')} Z`;
+    }).join(' ');
+    body+=`<path d="${d}" fill="${col}" fill-rule="evenodd" stroke="#374151" stroke-width="0.3"/>\n`;
+  }
+  for (const ml of state.measureLines) {
+    const {x1,y1,x2,y2}=ml;
+    const len=Math.hypot(x2-x1,y2-y1)/ppc; if(len<0.1) continue;
+    const col=ml.color||state.defaultMeasureColor;
+    const label=`${len.toFixed(0)} cm`;
+    const ux=(x2-x1)/(len*ppc), uy=(y2-y1)/(len*ppc);
+    const mx=(x1+x2)/(2*ppc), my=(y1+y2)/(2*ppc);
+    const fontSize=5;
+    const tick=fontSize*0.8;
+    const nx=-uy*tick, ny=ux*tick;
+    const gapHalf=label.length*fontSize*0.28+fontSize*0.5;
+    const p=(n,d=3)=>n.toFixed(d);
+    if (len>gapHalf*2) {
+      body+=`<line x1="${p(x1/ppc)}" y1="${p(y1/ppc)}" x2="${p(mx-ux*gapHalf)}" y2="${p(my-uy*gapHalf)}" stroke="${col}" stroke-width="0.3"/>\n`;
+      body+=`<line x1="${p(mx+ux*gapHalf)}" y1="${p(my+uy*gapHalf)}" x2="${p(x2/ppc)}" y2="${p(y2/ppc)}" stroke="${col}" stroke-width="0.3"/>\n`;
+    } else {
+      body+=`<line x1="${p(x1/ppc)}" y1="${p(y1/ppc)}" x2="${p(x2/ppc)}" y2="${p(y2/ppc)}" stroke="${col}" stroke-width="0.3"/>\n`;
+    }
+    [[x1/ppc,y1/ppc],[x2/ppc,y2/ppc]].forEach(([px,py])=>{
+      body+=`<line x1="${p(px+nx)}" y1="${p(py+ny)}" x2="${p(px-nx)}" y2="${p(py-ny)}" stroke="${col}" stroke-width="0.3"/>\n`;
+    });
+    body+=`<text x="${p(mx)}" y="${p(my)}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-family="sans-serif" font-weight="bold" fill="${col}">${label}</text>\n`;
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${cssW}" height="${cssH}" viewBox="${f4(vx0)} ${f4(vy0)} ${f4(vW)} ${f4(vH)}">\n${body}</svg>`;
+  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  Object.assign(document.createElement('a'),{href:url,download:'floorplan-slice.svg'}).click();
+});
+
+// ─── PNG export ───────────────────────────────────────────────────────────
+document.getElementById('btn-export-png').addEventListener('click',()=>{
+  const scale=4; // 4× oversampling
+  const ec=document.createElement('canvas');
+  ec.width=state.canvasW*scale; ec.height=state.canvasH*scale;
+  const esc=ec.getContext('2d');
+  esc.save(); esc.scale(scale,scale);
+  renderSliceScene(esc,scale);
+  esc.restore();
+  ec.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'),{href:url,download:'floorplan-slice.png'}).click();
+    URL.revokeObjectURL(url);
+  });
+});
 
 // ─── WebXR / VR ───────────────────────────────────────────────────────────
 let xrSession = null;
@@ -1845,6 +2240,7 @@ document.addEventListener('keydown',e=>{
   if(document.getElementById('mat-modal').classList.contains('open')) return;
   if(e.key==='d'||e.key==='D') setMode('draw');
   if(e.key==='s'||e.key==='S') setMode('select');
+  if(e.key==='m'||e.key==='M') setMode('measure');
   if(e.key==='Delete'||e.key==='Backspace') deleteSelected();
   if(e.key==='r'||e.key==='R') rotateSel(true);
   if(e.key==='Escape') setSelected(null);
