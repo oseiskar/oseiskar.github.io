@@ -432,8 +432,11 @@
         <span style="font-size:10px;color:#9ca3af;margin-left:2px">&#9660;</span>
       </button>
       <div class="divider"></div>
-      <span class="prop-lbl">Round:</span>
-      <input type="number" class="prop-num" id="p-round" step="1" min="0" value="0" title="Corner rounding radius in cm">
+      <span class="prop-lbl">Round XY:</span>
+      <input type="number" class="prop-num" id="p-round" step="1" min="0" value="0" title="XY plane corner rounding radius in cm (affects 2D views)">
+      <span class="prop-lbl">cm</span>
+      <span class="prop-lbl">Round Z:</span>
+      <input type="number" class="prop-num" id="p-roundz" step="1" min="0" value="0" title="Z direction rounding radius in cm">
       <span class="prop-lbl">cm</span>
       <div class="divider"></div>
     </div>
@@ -570,6 +573,7 @@ import { GLTFExporter }            from 'three/addons/exporters/GLTFExporter.js'
 import { XRControllerModelFactory} from 'three/addons/webxr/XRControllerModelFactory.js';
 import { RGBELoader }              from 'three/addons/loaders/RGBELoader.js';
 import { RoundedBoxGeometry }      from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeVertices }           from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ─── Material library ─────────────────────────────────────────────────────
 let materials = [];   // { id, name, type, color, metalness, roughness, opacity, texData, texScale, texAspect }
@@ -702,6 +706,18 @@ const ctx        = canvas.getContext('2d');
 const canvasWrap = document.getElementById('canvas-wrap');
 let bgImage = null;
 
+// Draw a rounded-rectangle path (or plain rect if r <= 0)
+function roundRectPath(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  if (r <= 0) { c.rect(x, y, w, h); return; }
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y,     x + w, y + h, r);
+  c.arcTo(x + w, y + h, x,     y + h, r);
+  c.arcTo(x,     y + h, x,     y,     r);
+  c.arcTo(x,     y,     x + w, y,     r);
+  c.closePath();
+}
+
 function render2D() {
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const cssW=canvasWrap.clientWidth,cssH=canvasWrap.clientHeight;
@@ -729,10 +745,13 @@ function render2D() {
     const isPrimary=b.id===state.selectedId, isSel=state.selectedIds.has(b.id);
     const mat=getBoxMat(b);
     const col=matDisplayColor(mat), op=matDisplayOpacity(mat);
-    ctx.globalAlpha=op*0.45; ctx.fillStyle=col; ctx.fillRect(b.x,b.y,b.w,b.h);
+    const rPx=(b.roundingXY??0)*(state.pixelsPerCm||1);
+    ctx.globalAlpha=op*0.45; ctx.fillStyle=col;
+    ctx.beginPath(); roundRectPath(ctx,b.x,b.y,b.w,b.h,rPx); ctx.fill();
     ctx.globalAlpha=Math.max(op,0.4);
     ctx.strokeStyle=isPrimary?'#facc15':isSel?'#fde68a':dimColor(col);
-    ctx.lineWidth=isSel?2*lw1:lw1; ctx.strokeRect(b.x,b.y,b.w,b.h);
+    ctx.lineWidth=isSel?2*lw1:lw1;
+    ctx.beginPath(); roundRectPath(ctx,b.x,b.y,b.w,b.h,rPx); ctx.stroke();
     if(b.w>50*lw1&&b.h>18*lw1){
       ctx.font=`${11*lw1}px monospace`; ctx.fillStyle=isPrimary?'#b45309':'#1e293b'; ctx.globalAlpha=0.9;
       ctx.fillText(`z:${b.minZ}–${b.maxZ}cm`,b.x+4*lw1,b.y+13*lw1);
@@ -1011,6 +1030,7 @@ function createBox(shape) {
     id: state.nextId++, x: shape.x, y: shape.y, w: shape.w, h: shape.h,
     minZ: defaultProps.minZ, maxZ: defaultProps.maxZ,
     matId: defaultMatId ?? materials[0].id,
+    roundingXY: 0, roundingZ: 0,
   };
   state.boxes.push(box);
   syncBoxes3D();
@@ -1050,8 +1070,9 @@ const pW     = document.getElementById('p-w');
 const pH     = document.getElementById('p-h');
 const pMinZ  = document.getElementById('p-minz');
 const pMaxZ  = document.getElementById('p-maxz');
-const pRound = document.getElementById('p-round');
-const pInfo  = document.getElementById('p-info');
+const pRound  = document.getElementById('p-round');
+const pRoundZ = document.getElementById('p-roundz');
+const pInfo   = document.getElementById('p-info');
 
 // Update a material swatch button to reflect a material's appearance
 function updateMatDisplay(mat, swatchEl, labelEl) {
@@ -1070,7 +1091,8 @@ function showProps(box) {
     pH.value = Math.round(box.h / state.pixelsPerCm);
   }
   pMinZ.value = box.minZ; pMaxZ.value = box.maxZ;
-  pRound.value = box.rounding ?? 0;
+  pRound.value  = box.roundingXY ?? 0;
+  pRoundZ.value = box.roundingZ  ?? 0;
   const mat = getBoxMat(box);
   updateMatDisplay(mat, document.getElementById('p-mat-swatch'), document.getElementById('p-mat-label'));
 }
@@ -1088,7 +1110,8 @@ function onPropChange() {
   }
   box.minZ = parseFloat(pMinZ.value) || 0;
   box.maxZ = parseFloat(pMaxZ.value) || 0;
-  box.rounding = Math.max(0, parseFloat(pRound.value) || 0);
+  box.roundingXY = Math.max(0, parseFloat(pRound.value)  || 0);
+  box.roundingZ  = Math.max(0, parseFloat(pRoundZ.value) || 0);
   defaultProps.minZ = box.minZ; defaultProps.maxZ = box.maxZ;
   syncBoxes3D(); render2D();
 }
@@ -1097,7 +1120,8 @@ pW.addEventListener('input', onPropChange);
 pH.addEventListener('input', onPropChange);
 pMinZ.addEventListener('input', onPropChange);
 pMaxZ.addEventListener('input', onPropChange);
-pRound.addEventListener('input', onPropChange);
+pRound.addEventListener('input',  onPropChange);
+pRoundZ.addEventListener('input', onPropChange);
 document.getElementById('p-delete').addEventListener('click', deleteSelected);
 
 // Material button → open picker
@@ -1265,13 +1289,13 @@ document.getElementById('btn-save').addEventListener('click', () => {
   }
 
   const payload = {
-    version: 8,
+    version: 9,
     canvasW: state.canvasW, canvasH: state.canvasH,
     floorSrc: state.floorSrc, nextId: state.nextId,
     textures,
     materials: materials.map(serializeMat),
     nextMatId,
-    boxes: state.boxes.map(b => ({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ,maxZ:b.maxZ,matId:b.matId,rounding:b.rounding??0})),
+    boxes: state.boxes.map(b => ({id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ,maxZ:b.maxZ,matId:b.matId,roundingXY:b.roundingXY??0,roundingZ:b.roundingZ??0})),
     defaultProps: {...defaultProps},
     defaultMatId,
     envMat: { floor: serializeMat({...envMat.floor}), ceil: serializeMat({...envMat.ceil}) },
@@ -1446,7 +1470,8 @@ function loadFromJSON(data) {
       id:b.id, x:b.x, y:b.y, w:b.w, h:b.h,
       minZ:b.minZ??0, maxZ:b.maxZ??250,
       matId: b.matId ?? (materials[0]?.id ?? 1),
-      rounding: b.rounding ?? 0,
+      roundingXY: b.roundingXY ?? b.rounding ?? 0,
+      roundingZ:  b.roundingZ  ?? b.rounding ?? 0,
     }));
   } else {
     // v5 or earlier — auto-create materials from box properties
@@ -1467,7 +1492,7 @@ function loadFromJSON(data) {
         const lib = newMaterial({ name:`Material ${nextMatId}`, ...m });
         materials.push(lib); keyToId.set(key, lib.id);
       }
-      return {id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ??0,maxZ:b.maxZ??250,matId:keyToId.get(key)};
+      return {id:b.id,x:b.x,y:b.y,w:b.w,h:b.h,minZ:b.minZ??0,maxZ:b.maxZ??250,matId:keyToId.get(key),roundingXY:b.roundingXY??b.rounding??0,roundingZ:b.roundingZ??b.rounding??0};
     });
   }
 
@@ -1710,22 +1735,72 @@ function applyBoxUVs(geo, w, h, d, unitScale, aspect) {
   attr.needsUpdate = true;
 }
 
-// Build a box geometry, optionally with rounded corners.
-// roundingCm > 0 uses RoundedBoxGeometry; the radius is clamped so it never
-// exceeds half the shortest dimension (at that limit a cube becomes a sphere
-// and a flat box becomes a cylinder).
-function makeBoxGeo(w3, h, d3, mat, roundingCm) {
-  if (roundingCm > 0) {
-    const maxR = Math.min(w3, h, d3) / 2;
-    const r    = Math.min(roundingCm * getYScale(), maxR);
-    // More segments for higher rounding fraction → smoother sphere/cylinder
-    const frac = r / maxR; // 0..1
-    const segs = Math.max(2, Math.round(2 + frac * 8)); // 2..10
-    return new RoundedBoxGeometry(w3, h, d3, segs, r);
+// Build a box geometry with optional XY-plane and Z-direction rounding.
+// Build a box geometry with independent XY-plane and Z-direction rounding.
+// Uses ExtrudeGeometry throughout:
+//   - XY rounding: the 2D cross-section shape is a rounded rectangle.
+//   - Z rounding:  bevelSize = -cRZ shrinks the end-face inward, creating
+//                  smooth arcs at the top and bottom edges independently of
+//                  the XY corner radius.  Three.js supports negative bevelSize.
+// Total extrusion height = depth + 2*bevelThickness = (h - 2*cRZ) + 2*cRZ = h.
+function makeBoxGeo(w3, h, d3, mat, roundingXYcm, roundingZcm) {
+  const ysc = getYScale();
+  const rXY = (roundingXYcm || 0) * ysc;
+  const rZ  = (roundingZcm  || 0) * ysc;
+
+  if (rXY > 0) {
+    // Clamp Z rounding; enforce cRZ < rXY so XY rounding always dominates
+    const cRZ = Math.min(rZ, rXY - 1e-6, h / 2 - 0.0001, w3 / 2 - 0.0001, d3 / 2 - 0.0001);
+    // Shape = contracted face size (w3-2·cRZ) × (d3-2·cRZ).
+    // Positive bevelSize expands the outline outward by cRZ so the body reaches w3×d3.
+    const shapeHW = (w3 - 2 * cRZ) / 2;
+    const shapeHD = (d3 - 2 * cRZ) / 2;
+    const adjRXY = Math.max(0, rXY - cRZ);
+    const cRXY = adjRXY > 0 ? Math.min(adjRXY, shapeHW - 0.0001, shapeHD - 0.0001) : 0;
+
+    const shape = new THREE.Shape();
+    if (cRXY > 0) {
+      shape.moveTo(-shapeHW + cRXY, -shapeHD);
+      shape.lineTo( shapeHW - cRXY, -shapeHD);
+      shape.quadraticCurveTo( shapeHW, -shapeHD,  shapeHW, -shapeHD + cRXY);
+      shape.lineTo( shapeHW,  shapeHD - cRXY);
+      shape.quadraticCurveTo( shapeHW,  shapeHD,  shapeHW - cRXY,  shapeHD);
+      shape.lineTo(-shapeHW + cRXY,  shapeHD);
+      shape.quadraticCurveTo(-shapeHW,  shapeHD, -shapeHW,  shapeHD - cRXY);
+      shape.lineTo(-shapeHW, -shapeHD + cRXY);
+      shape.quadraticCurveTo(-shapeHW, -shapeHD, -shapeHW + cRXY, -shapeHD);
+    } else {
+      shape.moveTo(-shapeHW, -shapeHD);
+      shape.lineTo( shapeHW, -shapeHD);
+      shape.lineTo( shapeHW,  shapeHD);
+      shape.lineTo(-shapeHW,  shapeHD);
+      shape.closePath();
+    }
+
+    const bevelEnabled = cRZ > 0;
+    const depth = bevelEnabled ? Math.max(0.0001, h - 2 * cRZ) : h;
+    const zSegs = bevelEnabled ? Math.max(2, Math.round(3 + (cRZ / (h / 2)) * 5)) : 0;
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth,
+      bevelEnabled,
+      bevelSize:      bevelEnabled ? cRZ : 0,
+      bevelThickness: cRZ,
+      bevelSegments:  zSegs,
+      curveSegments:  cRXY > 0 ? 8 : 1,
+    });
+    // Bevel front sits at z=-cRZ, back at z=h-cRZ → center = h/2-cRZ
+    geo.translate(0, 0, -(h / 2 - cRZ));
+    geo.rotateX(-Math.PI / 2);
+    geo.deleteAttribute('normal'); // mergeVertices hashes all attrs; drop normal so merge is by position+uv
+    const merged = mergeVertices(geo);
+    merged.computeVertexNormals();
+    geo.dispose();
+    return merged;
   }
+
   const geo = new THREE.BoxGeometry(w3, h, d3);
   if (mat && mat.type === 'texture' && mat.texData) {
-    applyBoxUVs(geo, w3, h, d3, (mat.texScale || 100) * getYScale(), mat.texAspect ?? 1);
+    applyBoxUVs(geo, w3, h, d3, (mat.texScale || 100) * ysc, mat.texAspect ?? 1);
   }
   return geo;
 }
@@ -1774,15 +1849,16 @@ function syncBoxes3D() {
     const x3=b.x*sc+(b.w*sc)/2-fw/2, z3=b.y*sc+(b.h*sc)/2-fh/2;
     const y3=b.minZ*ysc+height/2, w3=b.w*sc, d3=b.h*sc;
     const mat = getBoxMat(b);
-    const rounding = b.rounding ?? 0;
+    const rXY = b.roundingXY ?? 0;
+    const rZ  = b.roundingZ  ?? 0;
     if (meshMap.has(b.id)) {
       const m=meshMap.get(b.id);
       m.geometry.dispose(); m.material.dispose();
-      m.geometry=makeBoxGeo(w3,height,d3,mat,rounding);
+      m.geometry=makeBoxGeo(w3,height,d3,mat,rXY,rZ);
       m.material=makeMeshMat(mat);
       m.position.set(x3,y3,z3);
     } else {
-      const mesh=new THREE.Mesh(makeBoxGeo(w3,height,d3,mat,rounding), makeMeshMat(mat));
+      const mesh=new THREE.Mesh(makeBoxGeo(w3,height,d3,mat,rXY,rZ), makeMeshMat(mat));
       mesh.position.set(x3,y3,z3); scene.add(mesh); meshMap.set(b.id,mesh);
     }
   }
@@ -1935,9 +2011,13 @@ function fitSliceToView() {
 function renderSliceScene(sc, zoom) {
   const lw=1/zoom, cW=state.canvasW, cH=state.canvasH;
   sc.fillStyle='#ffffff'; sc.fillRect(0,0,cW,cH);
-  // Polygon unions per material
-  const boxes=sliceBoxesAtHeight(), byMat=new Map();
-  for (const b of boxes) { if(!byMat.has(b.matId)) byMat.set(b.matId,[]); byMat.get(b.matId).push({x:b.x,y:b.y,w:b.w,h:b.h}); }
+  const boxes=sliceBoxesAtHeight();
+  // Separate rounded from non-rounded boxes
+  const roundedBoxes=boxes.filter(b=>(b.roundingXY??0)>0);
+  const flatBoxes=boxes.filter(b=>!((b.roundingXY??0)>0));
+  // Flat boxes: polygon unions per material (original behaviour)
+  const byMat=new Map();
+  for (const b of flatBoxes) { if(!byMat.has(b.matId)) byMat.set(b.matId,[]); byMat.get(b.matId).push({x:b.x,y:b.y,w:b.w,h:b.h}); }
   for (const [matId, rects] of byMat) {
     const polys=computeUnionPolygons(rects); if(!polys.length) continue;
     sc.beginPath();
@@ -1947,6 +2027,13 @@ function renderSliceScene(sc, zoom) {
       sc.closePath();
     }
     sc.fillStyle=matDisplayColor(getMat(matId)); sc.fill('evenodd');
+    sc.strokeStyle='#374151'; sc.lineWidth=1.5*lw; sc.stroke();
+  }
+  // Rounded boxes: draw individually with rounded corners
+  for (const b of roundedBoxes) {
+    const rPx=(b.roundingXY??0)*(state.pixelsPerCm||1);
+    sc.beginPath(); roundRectPath(sc,b.x,b.y,b.w,b.h,rPx);
+    sc.fillStyle=matDisplayColor(getMat(b.matId)); sc.fill();
     sc.strokeStyle='#374151'; sc.lineWidth=1.5*lw; sc.stroke();
   }
   // Measure lines
