@@ -491,6 +491,7 @@
 
     <div class="mat-tab-row">
       <button class="mat-tab active" data-mode="color">Color</button>
+      <button class="mat-tab" data-mode="light">Light</button>
       <button class="mat-tab" data-mode="principled">Principled</button>
       <button class="mat-tab" data-mode="texture">Texture</button>
     </div>
@@ -500,6 +501,19 @@
       <div class="mat-row">
         <span class="mat-lbl">Color</span>
         <input type="color" id="mat-color" value="#cccccc" class="mat-color-in">
+      </div>
+    </div>
+
+    <!-- Light panel -->
+    <div id="mat-panel-light" class="mat-panel">
+      <div class="mat-row">
+        <span class="mat-lbl">Color</span>
+        <input type="color" id="mat-light-color" value="#ffffff" class="mat-color-in">
+      </div>
+      <div class="mat-row">
+        <span class="mat-lbl">Strength</span>
+        <input type="range" id="mat-light-emission" class="mat-range" min="0" max="10" step="0.1" value="1">
+        <span class="mat-val" id="mat-light-emission-val">1.0</span>
       </div>
     </div>
 
@@ -576,7 +590,7 @@ import { RoundedBoxGeometry }      from 'three/addons/geometries/RoundedBoxGeome
 import { mergeVertices }           from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ─── Material library ─────────────────────────────────────────────────────
-let materials = [];   // { id, name, type, color, metalness, roughness, opacity, texData, texScale, texAspect }
+let materials = [];   // { id, name, type, color, metalness, roughness, opacity, emission, texData, texScale, texAspect }
 let nextMatId  = 1;
 let defaultMatId = null; // matId to use for the next new box
 
@@ -590,6 +604,7 @@ function newMaterial(props = {}) {
     metalness: props.metalness ?? 0.05,
     roughness: props.roughness ?? 0.65,
     opacity:   props.opacity   ?? 1.0,
+    emission:  props.emission  ?? 1.0,
     texData:   props.texData   || null,
     texScale:  props.texScale  ?? 100,
     texAspect: props.texAspect ?? 1,
@@ -1082,7 +1097,7 @@ function updateMatDisplay(mat, swatchEl, labelEl) {
   } else {
     swatchEl.style.background = mat.color || '#cccccc';
   }
-  if (labelEl) labelEl.textContent = mat.name || (mat.type === 'texture' ? 'Texture' : mat.type === 'principled' ? 'Principled' : 'Color');
+  if (labelEl) labelEl.textContent = mat.name || (mat.type === 'texture' ? 'Texture' : mat.type === 'principled' ? 'Principled' : mat.type === 'light' ? 'Light' : 'Color');
 }
 
 function showProps(box) {
@@ -1320,10 +1335,27 @@ document.getElementById('btn-export-glb').addEventListener('click', () => {
   const matCache = new Map();
   function sharedMat(srcMat) {
     if (srcMat.map) return srcMat.clone();
+    if (srcMat.userData?.isLight) {
+      const em = srcMat.userData.baseEmissive;
+      const intensity = srcMat.userData.emissiveIntensity ?? 1;
+      const key = 'light:' + em.getHexString() + ':' + intensity;
+      if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x000000), roughness: 0.65, metalness: 0.05,
+        emissive: em.clone(), emissiveIntensity: intensity,
+      }));
+      return matCache.get(key);
+    }
+    if (srcMat.transparent && srcMat.opacity < 0.999) {
+      const key = 'trans:' + srcMat.color.getHexString() + ':' + srcMat.opacity + ':' + srcMat.roughness + ':' + srcMat.metalness;
+      if (!matCache.has(key)) matCache.set(key, new THREE.MeshPhysicalMaterial({
+        color: srcMat.color.clone(), roughness: srcMat.roughness, metalness: srcMat.metalness,
+        transmission: 1 - srcMat.opacity,
+      }));
+      return matCache.get(key);
+    }
     const key = srcMat.color.getHexString()+':'+srcMat.opacity+':'+srcMat.roughness+':'+srcMat.metalness;
     if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({
       color:srcMat.color.clone(), roughness:srcMat.roughness, metalness:srcMat.metalness,
-      transparent:srcMat.transparent, opacity:srcMat.opacity,
     }));
     return matCache.get(key);
   }
@@ -1807,6 +1839,15 @@ function makeBoxGeo(w3, h, d3, mat, roundingXYcm, roundingZcm) {
 
 function makeMeshMat(mat) {
   if (!mat) mat = {type:'color',color:'#cccccc'};
+  if (mat.type === 'light') {
+    const col = new THREE.Color(mat.color||'#ffffff');
+    const intensity = mat.emission ?? 1;
+    const m = new THREE.MeshStandardMaterial({color:col,roughness:0.65,metalness:0.05,emissive:col.clone(),emissiveIntensity:intensity});
+    m.userData.isLight = true;
+    m.userData.baseEmissive = col.clone();
+    m.userData.emissiveIntensity = intensity;
+    return m;
+  }
   if (mat.type === 'principled') {
     const op = mat.opacity??1, isOpaque = op>=0.999;
     return new THREE.MeshStandardMaterial({color:mat.color||'#cccccc',metalness:mat.metalness??0.05,roughness:mat.roughness??0.65,transparent:!isOpaque,opacity:op,depthWrite:isOpaque});
@@ -1866,8 +1907,10 @@ function syncBoxes3D() {
 }
 
 function highlightSelected3D() {
-  for (const [id,mesh] of meshMap)
-    mesh.material.emissive?.set(state.selectedIds.has(id)?0x2a2000:0x000000);
+  for (const [id,mesh] of meshMap) {
+    if (mesh.material.userData?.isLight) continue;
+    mesh.material.emissive?.set(state.selectedIds.has(id) ? 0x2a2000 : 0x000000);
+  }
 }
 
 // ─── Resize ───────────────────────────────────────────────────────────────
@@ -2460,10 +2503,12 @@ function populateEditor(mat) {
   setMatMode(mat.type || 'color');
   document.getElementById('mat-color').value = mat.color || '#cccccc';
   document.getElementById('mat-pr-color').value = mat.color || '#cccccc';
-  const metal=mat.metalness??0.05, rough=mat.roughness??0.65, op=mat.opacity??1;
+  document.getElementById('mat-light-color').value = mat.color || '#ffffff';
+  const metal=mat.metalness??0.05, rough=mat.roughness??0.65, op=mat.opacity??1, em=mat.emission??1;
   document.getElementById('mat-pr-metal').value   = metal; document.getElementById('mat-pr-metal-val').textContent   = metal.toFixed(2);
   document.getElementById('mat-pr-rough').value   = rough; document.getElementById('mat-pr-rough-val').textContent   = rough.toFixed(2);
   document.getElementById('mat-pr-opacity').value = op;    document.getElementById('mat-pr-opacity-val').textContent = op.toFixed(2);
+  document.getElementById('mat-light-emission').value = em; document.getElementById('mat-light-emission-val').textContent = em.toFixed(1);
   document.getElementById('mat-tex-scale').value  = mat.texScale ?? 100;
   _pendingTex       = mat.texData   || null;
   _pendingTexAspect = mat.texAspect ?? 1;
@@ -2485,7 +2530,10 @@ function readEditorMat() {
   const mode = document.querySelector('.mat-tab.active')?.dataset.mode || 'color';
   const name = document.getElementById('mat-name').value.trim() || 'Material';
   if (mode === 'color')
-    return {name,type:'color',color:document.getElementById('mat-color').value,metalness:0.05,roughness:0.65,opacity:1,texData:null,texScale:100};
+    return {name,type:'color',color:document.getElementById('mat-color').value,metalness:0.05,roughness:0.65,opacity:1,emission:1,texData:null,texScale:100};
+  if (mode === 'light')
+    return {name,type:'light',color:document.getElementById('mat-light-color').value,metalness:0.05,roughness:0.65,opacity:1,
+            emission:parseFloat(document.getElementById('mat-light-emission').value),texData:null,texScale:100};
   if (mode === 'principled')
     return {name,type:'principled',color:document.getElementById('mat-pr-color').value,
             metalness:parseFloat(document.getElementById('mat-pr-metal').value),
@@ -2517,6 +2565,7 @@ document.getElementById('mat-tex-upload').addEventListener('change', e => {
 [['mat-pr-metal','mat-pr-metal-val'],['mat-pr-rough','mat-pr-rough-val'],['mat-pr-opacity','mat-pr-opacity-val']].forEach(([rid,vid])=>{
   document.getElementById(rid).addEventListener('input',e=>document.getElementById(vid).textContent=parseFloat(e.target.value).toFixed(2));
 });
+document.getElementById('mat-light-emission').addEventListener('input',e=>document.getElementById('mat-light-emission-val').textContent=parseFloat(e.target.value).toFixed(1));
 
 // Save
 document.getElementById('mat-editor-ok').addEventListener('click', () => {
