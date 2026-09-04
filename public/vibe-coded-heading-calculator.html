@@ -2,225 +2,1372 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Heading Calculator</title>
-    <!-- Tailwind CSS for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- LeafletJS for the interactive map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Tailwind CSS with offline fallback -->
+    <script src="vibe-coded-heading-calculator_files/3.4.17"></script>
+    <script>
+        if (!window.tailwind) {
+            document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+        }
+    </script>
+
+    <!-- LeafletJS with offline fallback -->
+    <link rel="stylesheet" href="vibe-coded-heading-calculator_files/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="vibe-coded-heading-calculator_files/leaflet.js"></script>
+    <script>
+        if (!window.L) {
+            document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+        }
+    </script>
+
     <style>
-        /* Ensure the map covers the entire screen */
         html, body {
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Prevent scrolling */
+            overflow: hidden;
+            touch-action: manipulation;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
+
         #map {
             width: 100vw;
             height: 100vh;
         }
-        /* Style for the overlay dialog to prevent map interaction */
-        .dialog-visible {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(-50%) scale(1);
+
+        /* GPS live radar beacon animation */
+        @keyframes gps-beacon {
+            0% { transform: scale(0.6); opacity: 0.9; }
+            80%, 100% { transform: scale(2.4); opacity: 0; }
         }
-        .dialog-hidden {
-            opacity: 0;
-            visibility: hidden;
-            transform: translateX(-50%) scale(0.95);
+        @keyframes gps-dot-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.18); }
+        }
+
+        .gps-pulse-ring {
+            animation: gps-beacon 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        .gps-pulse-dot {
+            animation: gps-dot-pulse 2s ease-in-out infinite;
+        }
+
+        /* Custom scrollbars */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        /* Custom marker container styling */
+        .custom-marker-icon {
+            background: transparent;
+            border: none;
         }
     </style>
 </head>
-<body class="font-sans">
+<body class="bg-gray-100 select-none">
 
-    <div class="relative w-screen h-screen">
-        <!-- Map Container -->
+    <div class="relative w-screen h-screen overflow-hidden">
+        <!-- Leaflet Map Container -->
         <div id="map" class="z-0"></div>
 
-        <!-- Overlay Dialog for Instructions and Results -->
-        <div id="dialog" class="absolute bottom-10 left-1/2 z-[1000] bg-white p-6 rounded-xl shadow-2xl text-center w-11/12 max-w-md transition-all duration-300 ease-in-out">
-            <!-- Instructions Content -->
-            <div id="instructions-content">
-                 <h1 class="text-xl md:text-2xl font-bold text-blue-600 mb-2">Heading Calculator</h1>
-                 <p id="instructions" class="text-gray-700">Click the map to set a starting point.</p>
-                 <button id="gps-button" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg w-full transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
-                    Use My Location
+        <!-- Floating Dialog Card -->
+        <div id="dialog" class="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-[1000] bg-white rounded-2xl shadow-2xl w-[94vw] max-w-md transition-all duration-300 ease-in-out flex flex-col border border-gray-200 overflow-hidden">
+            
+            <!-- Card Header & Tab Bar -->
+            <div class="bg-gray-50 border-b border-gray-200 px-3 pt-2.5 pb-2 flex items-center justify-between gap-2">
+                <!-- Navigation Tabs -->
+                <div class="flex gap-1.5 bg-gray-200/80 p-1 rounded-xl flex-1 text-xs font-semibold">
+                    <button id="tab-interactive-btn" class="flex-1 py-1.5 px-2.5 rounded-lg bg-white text-blue-600 shadow-sm transition-all flex items-center justify-center gap-1.5 font-bold">
+                        <span>🎯 Map & GPS</span>
+                    </button>
+                    <button id="tab-manual-btn" class="flex-1 py-1.5 px-2.5 rounded-lg text-gray-600 hover:text-gray-900 transition-all flex items-center justify-center gap-1.5">
+                        <span>✍️ Coordinates</span>
+                    </button>
+                </div>
+
+                <!-- Collapse / Expand Toggle Button -->
+                <button id="toggle-collapse-btn" class="p-1.5 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-200/70 transition-colors" title="Collapse / Expand dialog" aria-label="Toggle dialog size">
+                    <svg id="collapse-icon" class="w-5 h-5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                 </button>
             </div>
 
-            <!-- Results Content (initially hidden) -->
-            <div id="results-content" class="hidden">
-                 <h2 class="text-lg font-medium text-gray-500">Heading Angle</h2>
-                 <p id="heading-result" class="text-5xl font-bold text-blue-600 my-2">-</p>
-                 <p class="text-sm text-gray-500">Degrees from True North</p>
-                 <button id="reset-button" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg w-full transition-colors">
-                     Calculate Another
-                 </button>
+            <!-- Collapsed summary pill (only visible when collapsed) -->
+            <div id="collapsed-summary" class="hidden px-4 py-2.5 bg-white text-xs font-semibold text-gray-700 cursor-pointer flex items-center justify-between hover:bg-gray-50">
+                <span id="collapsed-text">🧭 Heading Calculator (Tap to expand)</span>
+                <span class="text-blue-600 text-[11px] font-bold">Expand ▲</span>
+            </div>
+
+            <!-- Main Dialog Body (scrollable if needed on small screens) -->
+            <div id="dialog-body" class="p-4 overflow-y-auto max-h-[75vh] custom-scroll">
+
+                <!-- ================= TAB 1: INTERACTIVE (MAP & GPS) ================= -->
+                <div id="tab-interactive" class="space-y-3">
+                    
+                    <!-- Point Status Chips -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <!-- Point 1 Card -->
+                        <div id="p1-chip" class="p-2.5 rounded-xl border border-gray-200 bg-gray-50 transition-all text-left">
+                            <div class="flex items-center justify-between">
+                                <span class="flex items-center gap-1.5">
+                                    <span id="p1-dot" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+                                    <span class="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Point 1</span>
+                                </span>
+                                <span id="p1-acc-badge" class="hidden text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">±0m</span>
+                            </div>
+                            <div id="p1-text" class="text-xs text-gray-500 truncate mt-1">Not set</div>
+                        </div>
+
+                        <!-- Point 2 Card -->
+                        <div id="p2-chip" class="p-2.5 rounded-xl border border-gray-200 bg-gray-50 transition-all text-left">
+                            <div class="flex items-center justify-between">
+                                <span class="flex items-center gap-1.5">
+                                    <span id="p2-dot" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+                                    <span class="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Point 2</span>
+                                </span>
+                                <span id="p2-acc-badge" class="hidden text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800">±0m</span>
+                            </div>
+                            <div id="p2-text" class="text-xs text-gray-500 truncate mt-1">Not set</div>
+                        </div>
+                    </div>
+
+                    <!-- Step Instruction Banner -->
+                    <div id="instruction-box" class="text-xs text-gray-600 bg-blue-50/60 p-2.5 rounded-xl border border-blue-100 text-left flex items-start gap-2">
+                        <span class="text-blue-600 text-sm font-bold">ℹ️</span>
+                        <p id="instructions" class="mt-0.5 leading-relaxed">Click the map or use GPS to set the starting point (Point 1).</p>
+                    </div>
+
+                    <!-- Standard GPS Button (idle state) -->
+                    <button id="gps-button" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all text-sm disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <span id="gps-button-label">Use My Location</span>
+                    </button>
+
+                    <!-- LIVE GPS TRACKING FEEDBACK PANEL (shown while acquiring GPS) -->
+                    <div id="gps-live-panel" class="hidden p-3.5 rounded-xl border-2 border-blue-500 bg-blue-50/80 text-left transition-all shadow-sm">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="relative flex h-3 w-3">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-600"></span>
+                                </span>
+                                <span id="gps-panel-target-title" class="text-xs font-bold uppercase tracking-wider text-blue-900">Acquiring Point 1</span>
+                            </div>
+                            <span id="gps-quality-badge" class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+                                Searching GPS...
+                            </span>
+                        </div>
+
+                        <!-- LIVE HEADING & UNCERTAINTY (shown live when acquiring Point 2) -->
+                        <div id="gps-live-heading-box" class="hidden my-2 p-3 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-xl shadow-md border border-blue-400/30">
+                            <div class="flex items-center justify-between text-[11px] font-semibold text-blue-100 mb-1">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                                    <span class="tracking-wider uppercase font-bold text-white">Live Heading</span>
+                                </span>
+                                <span id="gps-live-range-pill" class="bg-black/20 px-2 py-0.5 rounded-full font-mono text-[10px] text-blue-100 border border-white/10">--° – --°</span>
+                            </div>
+
+                            <div class="flex items-baseline gap-2 my-0.5">
+                                <span id="gps-live-heading-val" class="text-3xl font-extrabold tracking-tight">--°</span>
+                                <span id="gps-live-uncert-val" class="text-lg font-bold text-blue-200">± --°</span>
+                            </div>
+
+                            <div class="flex items-center justify-between text-[11px] text-blue-100 pt-1.5 border-t border-white/15 mt-1.5">
+                                <span>Distance: <b id="gps-live-dist-val" class="text-white">--</b></span>
+                                <span id="gps-live-uncert-status" class="text-emerald-300 font-semibold">Waiting for fix...</span>
+                            </div>
+                        </div>
+
+                        <!-- Live vs Best Accuracy Cards -->
+                        <div class="grid grid-cols-2 gap-2 my-2.5 bg-white/90 p-2.5 rounded-lg border border-blue-100 text-center">
+                            <div>
+                                <div class="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Current Accuracy</div>
+                                <div id="gps-current-acc-val" class="text-sm font-bold text-gray-800 mt-0.5">--</div>
+                            </div>
+                            <div class="border-l border-gray-200">
+                                <div class="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Best (Persisted)</div>
+                                <div id="gps-best-acc-val" class="text-sm font-bold text-emerald-600 mt-0.5">--</div>
+                            </div>
+                        </div>
+
+                        <!-- Live Coordinates Preview & Reset -->
+                        <div class="flex items-center justify-between text-[11px] text-gray-600 mb-3 px-1">
+                            <span id="gps-coords-text" class="font-mono text-gray-600 truncate">Waiting for satellite fix...</span>
+                            <button id="gps-reset-best-btn" class="text-blue-600 hover:text-blue-800 font-semibold underline shrink-0 ml-2" title="Reset best reading if you moved">Reset best</button>
+                        </div>
+
+                        <!-- Action Buttons: Accept & Cancel -->
+                        <div class="flex gap-2">
+                            <button id="gps-accept-btn" disabled class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl shadow transition-all disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 text-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                                <span id="gps-accept-label">Accept Position</span>
+                            </button>
+                            <button id="gps-cancel-btn" class="py-2.5 px-3 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-700 font-semibold rounded-xl transition-all text-sm">
+                                Cancel
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-2 text-center leading-tight">
+                            Accuracy circle shown on map. Wait for accuracy to settle, then click Accept.
+                        </p>
+                    </div>
+
+                    <!-- RESULTS PANEL (shown when both points are set) -->
+                    <div id="results-content" class="hidden text-left pt-1">
+                        <div class="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100/60 border border-blue-200 rounded-xl p-3.5 shadow-inner">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-[11px] font-bold uppercase tracking-wider text-blue-800">Heading (True North)</span>
+                                <span id="heading-range-pill" class="text-[11px] font-mono bg-blue-100 text-blue-900 border border-blue-200 px-2 py-0.5 rounded-full font-bold">--° – --°</span>
+                            </div>
+
+                            <!-- Large Angle Display -->
+                            <div class="flex items-baseline gap-2 my-1">
+                                <span id="heading-result" class="text-4xl font-extrabold text-blue-600 tracking-tight">-</span>
+                                <span id="heading-uncertainty-result" class="text-xl font-bold text-blue-500">± 0.0°</span>
+                            </div>
+
+                            <!-- Distance and details -->
+                            <div class="grid grid-cols-2 gap-y-1.5 gap-x-2 mt-3 pt-2.5 border-t border-blue-200/80 text-xs text-gray-700">
+                                <div>
+                                    <span class="text-gray-500">Distance:</span>
+                                    <span id="distance-result" class="font-bold text-gray-900 ml-1">-</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Angle Error:</span>
+                                    <span id="angle-error-type" class="font-bold text-gray-900 ml-1">Max bound</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">P1 Accuracy:</span>
+                                    <span id="p1-acc-result" class="font-bold text-emerald-700 ml-1">±0 m</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">P2 Accuracy:</span>
+                                    <span id="p2-acc-result" class="font-bold text-rose-700 ml-1">±0 m</span>
+                                </div>
+                            </div>
+
+                            <!-- Uncertainty warning if distance is too small relative to error -->
+                            <div id="warning-uncertainty" class="hidden mt-3 p-2 bg-amber-100/80 border border-amber-300 rounded-lg text-xs text-amber-900 flex items-start gap-1.5 leading-snug">
+                                <span class="text-sm">⚠️</span>
+                                <span id="warning-uncertainty-text">High angular uncertainty: Baseline distance is smaller than combined GPS inaccuracy.</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex gap-2 mt-3">
+                            <button id="reset-button" class="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow transition-all text-sm flex items-center justify-center gap-1.5">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                <span>Calculate Another</span>
+                            </button>
+                            <button id="edit-coordinates-btn" class="py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl border border-gray-200 transition-all text-sm flex items-center justify-center gap-1" title="Edit coordinates in textboxes">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                <span>Edit</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ================= TAB 2: MANUAL COORDINATES (TEXTBOXES) ================= -->
+                <div id="tab-manual" class="hidden space-y-3 text-left">
+                    
+                    <!-- Point 1 (Start) Box -->
+                    <div class="p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/40">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-3 h-3 rounded-full bg-emerald-600"></span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-emerald-900">Point 1 (Start)</span>
+                            </div>
+                            <div class="flex gap-1.5">
+                                <button id="manual-p1-gps-btn" class="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded border border-emerald-300 flex items-center gap-1 shadow-sm transition-colors">
+                                    🛰️ GPS
+                                </button>
+                                <button id="manual-p1-clear-btn" class="px-2 py-1 bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 text-xs font-semibold rounded border border-gray-200 shadow-sm transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Latitude (°)</label>
+                                <input id="input-p1-lat" type="number" step="any" placeholder="e.g. 60.16982" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Longitude (°)</label>
+                                <input id="input-p1-lng" type="number" step="any" placeholder="e.g. 24.93821" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Inaccuracy (meters)</label>
+                            <input id="input-p1-acc" type="number" step="any" min="0" placeholder="e.g. 4.5 (0 for exact)" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
+                        </div>
+                    </div>
+
+                    <!-- Point 2 (Destination) Box -->
+                    <div class="p-3 rounded-xl border-2 border-rose-200 bg-rose-50/40">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-3 h-3 rounded-full bg-rose-600"></span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-rose-900">Point 2 (Destination)</span>
+                            </div>
+                            <div class="flex gap-1.5">
+                                <button id="manual-p2-gps-btn" class="px-2 py-1 bg-white hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded border border-rose-300 flex items-center gap-1 shadow-sm transition-colors">
+                                    🛰️ GPS
+                                </button>
+                                <button id="manual-p2-clear-btn" class="px-2 py-1 bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 text-xs font-semibold rounded border border-gray-200 shadow-sm transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Latitude (°)</label>
+                                <input id="input-p2-lat" type="number" step="any" placeholder="e.g. 60.17450" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Longitude (°)</label>
+                                <input id="input-p2-lng" type="number" step="any" placeholder="e.g. 24.94210" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-gray-600 mb-0.5">Inaccuracy (meters)</label>
+                            <input id="input-p2-acc" type="number" step="any" min="0" placeholder="e.g. 5.0 (0 for exact)" class="w-full text-xs font-mono p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white">
+                        </div>
+                    </div>
+
+                    <!-- Apply & Reset Buttons -->
+                    <div class="flex gap-2 pt-1">
+                        <button id="manual-apply-btn" class="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow transition-all text-sm flex items-center justify-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                            <span>Apply & Calculate</span>
+                        </button>
+                        <button id="manual-reset-all-btn" class="py-3 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl border border-gray-200 transition-all text-sm">
+                            Reset
+                        </button>
+                    </div>
+
+                </div>
+
             </div>
         </div>
     </div>
 
     <script>
-        // DOM Element References
+        // ================= DOM ELEMENT REFERENCES =================
         const mapElement = document.getElementById('map');
         const dialogElement = document.getElementById('dialog');
-        const instructionsElement = document.getElementById('instructions');
-        const instructionsContentElement = document.getElementById('instructions-content');
-        const resultsContentElement = document.getElementById('results-content');
-        const headingResultElement = document.getElementById('heading-result');
-        const resetButton = document.getElementById('reset-button');
+        const dialogBody = document.getElementById('dialog-body');
+        const collapsedSummary = document.getElementById('collapsed-summary');
+        const collapsedText = document.getElementById('collapsed-text');
+        const toggleCollapseBtn = document.getElementById('toggle-collapse-btn');
+        const collapseIcon = document.getElementById('collapse-icon');
+
+        // Tabs
+        const tabInteractiveBtn = document.getElementById('tab-interactive-btn');
+        const tabManualBtn = document.getElementById('tab-manual-btn');
+        const tabInteractive = document.getElementById('tab-interactive');
+        const tabManual = document.getElementById('tab-manual');
+
+        // Interactive Tab elements
+        const p1Chip = document.getElementById('p1-chip');
+        const p1Dot = document.getElementById('p1-dot');
+        const p1Text = document.getElementById('p1-text');
+        const p1AccBadge = document.getElementById('p1-acc-badge');
+
+        const p2Chip = document.getElementById('p2-chip');
+        const p2Dot = document.getElementById('p2-dot');
+        const p2Text = document.getElementById('p2-text');
+        const p2AccBadge = document.getElementById('p2-acc-badge');
+
+        const instructions = document.getElementById('instructions');
         const gpsButton = document.getElementById('gps-button');
+        const gpsButtonLabel = document.getElementById('gps-button-label');
 
-        // State variables
-        let points = [];
-        let markers = [];
-        let polyline = null;
+        // GPS Live Tracking elements
+        const gpsLivePanel = document.getElementById('gps-live-panel');
+        const gpsPanelTargetTitle = document.getElementById('gps-panel-target-title');
+        const gpsQualityBadge = document.getElementById('gps-quality-badge');
+        const gpsLiveHeadingBox = document.getElementById('gps-live-heading-box');
+        const gpsLiveHeadingVal = document.getElementById('gps-live-heading-val');
+        const gpsLiveUncertVal = document.getElementById('gps-live-uncert-val');
+        const gpsLiveRangePill = document.getElementById('gps-live-range-pill');
+        const gpsLiveDistVal = document.getElementById('gps-live-dist-val');
+        const gpsLiveUncertStatus = document.getElementById('gps-live-uncert-status');
+        const gpsCurrentAccVal = document.getElementById('gps-current-acc-val');
+        const gpsBestAccVal = document.getElementById('gps-best-acc-val');
+        const gpsCoordsText = document.getElementById('gps-coords-text');
+        const gpsResetBestBtn = document.getElementById('gps-reset-best-btn');
+        const gpsAcceptBtn = document.getElementById('gps-accept-btn');
+        const gpsAcceptLabel = document.getElementById('gps-accept-label');
+        const gpsCancelBtn = document.getElementById('gps-cancel-btn');
 
-        // --- 1. INITIALIZE MAP ---
-        const map = L.map(mapElement, { zoomControl: false }).setView([20, 0], 2);
+        // Results elements
+        const resultsContent = document.getElementById('results-content');
+        const headingResult = document.getElementById('heading-result');
+        const headingUncertaintyResult = document.getElementById('heading-uncertainty-result');
+        const headingRangePill = document.getElementById('heading-range-pill');
+        const distanceResult = document.getElementById('distance-result');
+        const p1AccResult = document.getElementById('p1-acc-result');
+        const p2AccResult = document.getElementById('p2-acc-result');
+        const warningUncertainty = document.getElementById('warning-uncertainty');
+        const warningUncertaintyText = document.getElementById('warning-uncertainty-text');
+        const resetButton = document.getElementById('reset-button');
+        const editCoordinatesBtn = document.getElementById('edit-coordinates-btn');
+
+        // Manual Coordinates Tab elements
+        const inputP1Lat = document.getElementById('input-p1-lat');
+        const inputP1Lng = document.getElementById('input-p1-lng');
+        const inputP1Acc = document.getElementById('input-p1-acc');
+        const manualP1GpsBtn = document.getElementById('manual-p1-gps-btn');
+        const manualP1ClearBtn = document.getElementById('manual-p1-clear-btn');
+
+        const inputP2Lat = document.getElementById('input-p2-lat');
+        const inputP2Lng = document.getElementById('input-p2-lng');
+        const inputP2Acc = document.getElementById('input-p2-acc');
+        const manualP2GpsBtn = document.getElementById('manual-p2-gps-btn');
+        const manualP2ClearBtn = document.getElementById('manual-p2-clear-btn');
+
+        const manualApplyBtn = document.getElementById('manual-apply-btn');
+        const manualResetAllBtn = document.getElementById('manual-reset-all-btn');
+
+        // ================= APPLICATION STATE =================
+        let points = []; // Array of { lat, lng, accuracy, source }
+        let currentTab = 'interactive';
+        let isCollapsed = false;
+
+        // GPS Tracking state
+        let gpsActive = false;
+        let gpsWatchId = null;
+        let gpsTargetIndex = 0; // 0 for Point 1, 1 for Point 2
+        let currentGpsFix = null;
+        let bestGpsFix = null; // Persisted best reading (smallest accuracy)
+
+        // Leaflet Layer references
+        let p1Marker = null;
+        let p1Circle = null;
+        let p2Marker = null;
+        let p2Circle = null;
+        let polylineLayer = null;
+        let uncertaintyConeLayer = null;
+
+        let liveGpsMarker = null;
+        let liveGpsCircle = null;
+        let liveHeadingLine = null;
+        let liveUncertaintyCone = null;
+
+        // ================= 1. INITIALIZE MAP =================
+        const map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-
-        // --- 2. CORE FUNCTIONS ---
+        // ================= 2. GEODETIC & MATH UTILITIES =================
 
         /**
-         * Calculates the heading between two geographical points.
+         * Calculates initial great-circle heading from point1 to point2 in degrees [0, 360).
          */
-        function calculateHeading(point1, point2) {
-            const toRadians = deg => deg * Math.PI / 180;
-            const toDegrees = rad => (rad * 180 / Math.PI + 360) % 360;
+        function calculateHeading(p1, p2) {
+            const toRad = deg => deg * Math.PI / 180;
+            const toDeg = rad => (rad * 180 / Math.PI + 360) % 360;
 
-            const lat1 = toRadians(point1.lat);
-            const lon1 = toRadians(point1.lng);
-            const lat2 = toRadians(point2.lat);
-            const lon2 = toRadians(point2.lng);
+            const phi1 = toRad(p1.lat);
+            const lam1 = toRad(p1.lng);
+            const phi2 = toRad(p2.lat);
+            const lam2 = toRad(p2.lng);
+            const dLam = lam2 - lam1;
 
-            const deltaLon = lon2 - lon1;
+            const y = Math.sin(dLam) * Math.cos(phi2);
+            const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
 
-            const y = Math.sin(deltaLon) * Math.cos(lat2);
-            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon);
-            
-            const initialBearing = Math.atan2(y, x);
-            return toDegrees(initialBearing);
+            return toDeg(Math.atan2(y, x));
         }
 
         /**
-         * Updates the UI with the latest information.
+         * Calculates great-circle distance between two points in meters.
          */
-        function updateUI() {
-            switch (points.length) {
-                case 0: // Initial state
-                    dialogElement.classList.remove('dialog-hidden');
-                    dialogElement.classList.add('dialog-visible');
-                    instructionsContentElement.classList.remove('hidden');
-                    resultsContentElement.classList.add('hidden');
-                    instructionsElement.textContent = 'Click the map or use GPS to set a starting point.';
-                    gpsButton.disabled = false;
-                    break;
-                case 1: // First point selected
-                    instructionsElement.textContent = 'Select a destination point on the map, or use GPS.';
-                    gpsButton.disabled = false;
-                    break;
-                case 2: // Second point selected, show results
-                    const heading = calculateHeading(points[0], points[1]);
-                    headingResultElement.textContent = `${heading.toFixed(2)}°`;
-                    
-                    dialogElement.classList.remove('dialog-hidden');
-                    dialogElement.classList.add('dialog-visible');
-                    instructionsContentElement.classList.add('hidden');
-                    resultsContentElement.classList.remove('hidden');
-                    gpsButton.disabled = true;
-                    break;
+        function calculateDistance(p1, p2) {
+            const R = 6371008.8; // Mean Earth radius in meters
+            const toRad = deg => deg * Math.PI / 180;
+            const phi1 = toRad(p1.lat);
+            const phi2 = toRad(p2.lat);
+            const dPhi = toRad(p2.lat - p1.lat);
+            const dLam = toRad(p2.lng - p1.lng);
+
+            const a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) *
+                      Math.sin(dLam / 2) * Math.sin(dLam / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        /**
+         * Calculates destination point given distance (meters) and bearing (degrees).
+         */
+        function destinationPoint(p, distMeters, bearingDeg) {
+            const R = 6371008.8;
+            const delta = distMeters / R;
+            const theta = bearingDeg * Math.PI / 180;
+            const phi1 = p.lat * Math.PI / 180;
+            const lam1 = p.lng * Math.PI / 180;
+
+            const sinPhi1 = Math.sin(phi1), cosPhi1 = Math.cos(phi1);
+            const sinDelta = Math.sin(delta), cosDelta = Math.cos(delta);
+
+            const phi2 = Math.asin(sinPhi1 * cosDelta + cosPhi1 * sinDelta * Math.cos(theta));
+            const y = Math.sin(theta) * sinDelta * cosPhi1;
+            const x = cosDelta - sinPhi1 * Math.sin(phi2);
+            const lam2 = lam1 + Math.atan2(y, x);
+
+            return {
+                lat: phi2 * 180 / Math.PI,
+                lng: ((lam2 * 180 / Math.PI + 540) % 360) - 180
+            };
+        }
+
+        /**
+         * Calculates angle uncertainty from distance and position inaccuracies.
+         */
+        function calculateAngleUncertainty(p1, p2, D) {
+            const r1 = Math.max(0, Number(p1.accuracy) || 0);
+            const r2 = Math.max(0, Number(p2.accuracy) || 0);
+
+            if (D <= 0.001) {
+                return { deltaThetaMax: 180, deltaThetaRms: 180, isIndeterminate: true, r1, r2 };
+            }
+
+            if (r1 === 0 && r2 === 0) {
+                return { deltaThetaMax: 0, deltaThetaRms: 0, isIndeterminate: false, r1, r2 };
+            }
+
+            const totalR = r1 + r2;
+            if (totalR >= D) {
+                return { deltaThetaMax: 180, deltaThetaRms: 180, isIndeterminate: true, r1, r2 };
+            }
+
+            const deltaThetaMax = Math.asin(totalR / D) * 180 / Math.PI;
+            const deltaThetaRms = Math.atan2(Math.sqrt(r1 * r1 + r2 * r2), D) * 180 / Math.PI;
+
+            return { deltaThetaMax, deltaThetaRms, isIndeterminate: false, r1, r2 };
+        }
+
+        // ================= 3. MARKER ICON CREATION =================
+
+        function createPinIcon(label, color) {
+            return L.divIcon({
+                className: 'custom-marker-icon',
+                html: `
+                    <div style="width:30px; height:42px; position:relative; filter:drop-shadow(0 2px 5px rgba(0,0,0,0.4));">
+                        <svg viewBox="0 0 30 42" width="30" height="42" style="display:block;">
+                            <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0z" fill="${color}"/>
+                            <circle cx="15" cy="14" r="8" fill="#ffffff"/>
+                            <text x="15" y="18.5" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="${color}">${label}</text>
+                        </svg>
+                    </div>
+                `,
+                iconSize: [30, 42],
+                iconAnchor: [15, 42],
+                popupAnchor: [0, -38]
+            });
+        }
+
+        function createGpsDivIcon() {
+            return L.divIcon({
+                className: 'custom-marker-icon',
+                html: `
+                    <div style="width:30px; height:30px; position:relative; display:flex; align-items:center; justify-content:center;">
+                        <div class="gps-pulse-ring" style="position:absolute; width:30px; height:30px; border-radius:50%; background:rgba(37, 99, 235, 0.45);"></div>
+                        <div class="gps-pulse-dot" style="width:14px; height:14px; border-radius:50%; background:#2563eb; border:2.5px solid #ffffff; box-shadow:0 2px 5px rgba(0,0,0,0.4);"></div>
+                    </div>
+                `,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+        }
+
+        // ================= 4. MAP LAYERS & VISUALIZATION =================
+
+        function clearMapLayers() {
+            if (p1Marker) { map.removeLayer(p1Marker); p1Marker = null; }
+            if (p1Circle) { map.removeLayer(p1Circle); p1Circle = null; }
+            if (p2Marker) { map.removeLayer(p2Marker); p2Marker = null; }
+            if (p2Circle) { map.removeLayer(p2Circle); p2Circle = null; }
+            if (polylineLayer) { map.removeLayer(polylineLayer); polylineLayer = null; }
+            if (uncertaintyConeLayer) { map.removeLayer(uncertaintyConeLayer); uncertaintyConeLayer = null; }
+        }
+
+        function renderMapLayers() {
+            clearMapLayers();
+
+            const p1 = points[0];
+            const p2 = points[1];
+            const activeLayers = [];
+
+            // Render Point 1
+            if (p1) {
+                p1Marker = L.marker([p1.lat, p1.lng], {
+                    icon: createPinIcon('1', '#16a34a'),
+                    zIndexOffset: 500
+                }).addTo(map);
+
+                p1Marker.bindPopup(`
+                    <div class="text-xs">
+                        <strong class="text-emerald-700">Point 1 (Start)</strong><br>
+                        Lat: ${p1.lat.toFixed(6)}°<br>
+                        Lng: ${p1.lng.toFixed(6)}°<br>
+                        Accuracy: ±${p1.accuracy.toFixed(1)} m
+                    </div>
+                `);
+                activeLayers.push(p1Marker);
+
+                if (p1.accuracy > 0) {
+                    p1Circle = L.circle([p1.lat, p1.lng], {
+                        radius: p1.accuracy,
+                        color: '#15803d',
+                        weight: 2,
+                        dashArray: '3, 3',
+                        fillColor: '#22c55e',
+                        fillOpacity: 0.18
+                    }).addTo(map);
+                    p1Circle.bindPopup(`Point 1 Accuracy Circle: ±${p1.accuracy.toFixed(1)} m`);
+                    activeLayers.push(p1Circle);
+                }
+            }
+
+            // Render Point 2
+            if (p2) {
+                p2Marker = L.marker([p2.lat, p2.lng], {
+                    icon: createPinIcon('2', '#dc2626'),
+                    zIndexOffset: 600
+                }).addTo(map);
+
+                p2Marker.bindPopup(`
+                    <div class="text-xs">
+                        <strong class="text-rose-700">Point 2 (Destination)</strong><br>
+                        Lat: ${p2.lat.toFixed(6)}°<br>
+                        Lng: ${p2.lng.toFixed(6)}°<br>
+                        Accuracy: ±${p2.accuracy.toFixed(1)} m
+                    </div>
+                `);
+                activeLayers.push(p2Marker);
+
+                if (p2.accuracy > 0) {
+                    p2Circle = L.circle([p2.lat, p2.lng], {
+                        radius: p2.accuracy,
+                        color: '#b91c1c',
+                        weight: 2,
+                        dashArray: '3, 3',
+                        fillColor: '#ef4444',
+                        fillOpacity: 0.18
+                    }).addTo(map);
+                    p2Circle.bindPopup(`Point 2 Accuracy Circle: ±${p2.accuracy.toFixed(1)} m`);
+                    activeLayers.push(p2Circle);
+                }
+            }
+
+            // Render baseline line & uncertainty cone when both points exist
+            if (p1 && p2) {
+                // Line connecting the two locations
+                polylineLayer = L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], {
+                    color: '#2563eb',
+                    weight: 3.5,
+                    opacity: 0.95
+                }).addTo(map);
+                activeLayers.push(polylineLayer);
+
+                const D = calculateDistance(p1, p2);
+                const heading = calculateHeading(p1, p2);
+                const uncert = calculateAngleUncertainty(p1, p2, D);
+
+                polylineLayer.bindPopup(`
+                    <div class="text-xs">
+                        <strong class="text-blue-700">Heading Vector</strong><br>
+                        Heading: <b>${heading.toFixed(2)}°</b><br>
+                        Distance: <b>${D < 1000 ? D.toFixed(1) + ' m' : (D/1000).toFixed(2) + ' km'}</b>
+                    </div>
+                `);
+
+                // Draw Angle Uncertainty Cone if applicable
+                if (!uncert.isIndeterminate && uncert.deltaThetaMax > 0 && uncert.deltaThetaMax < 90) {
+                    const coneRadius = Math.max(D * 1.18, D + uncert.r2 + 10);
+                    const startBearing = heading - uncert.deltaThetaMax;
+                    const endBearing = heading + uncert.deltaThetaMax;
+
+                    const numSteps = 32;
+                    const arcPoints = [];
+                    for (let i = 0; i <= numSteps; i++) {
+                        const b = startBearing + (endBearing - startBearing) * (i / numSteps);
+                        arcPoints.push(destinationPoint(p1, coneRadius, b));
+                    }
+
+                    const conePolygon = [
+                        [p1.lat, p1.lng],
+                        ...arcPoints.map(pt => [pt.lat, pt.lng]),
+                        [p1.lat, p1.lng]
+                    ];
+
+                    uncertaintyConeLayer = L.polygon(conePolygon, {
+                        color: '#2563eb',
+                        weight: 1.5,
+                        dashArray: '5, 5',
+                        fillColor: '#3b82f6',
+                        fillOpacity: 0.18
+                    }).addTo(map);
+
+                    const minH = (heading - uncert.deltaThetaMax + 360) % 360;
+                    const maxH = (heading + uncert.deltaThetaMax + 360) % 360;
+                    uncertaintyConeLayer.bindPopup(`
+                        <div class="text-xs">
+                            <strong class="text-blue-700">Angle Uncertainty Cone</strong><br>
+                            Nominal: <b>${heading.toFixed(1)}°</b><br>
+                            Uncertainty: <b>±${uncert.deltaThetaMax.toFixed(1)}°</b><br>
+                            Range: <b>${minH.toFixed(1)}° – ${maxH.toFixed(1)}°</b>
+                        </div>
+                    `);
+                    activeLayers.push(uncertaintyConeLayer);
+                }
+
+                // Fit map to show both points, circles, and line/cone
+                if (activeLayers.length > 0) {
+                    const group = L.featureGroup(activeLayers);
+                    map.fitBounds(group.getBounds(), { padding: [50, 50], maxZoom: 18 });
+                }
+            } else if (p1 && !p2 && !gpsActive) {
+                // Focus on Point 1 if setting first point
+                if (p1.accuracy > 0 && p1Circle) {
+                    map.fitBounds(p1Circle.getBounds(), { padding: [60, 60], maxZoom: 18 });
+                } else {
+                    map.setView([p1.lat, p1.lng], 16);
+                }
             }
         }
 
-        /**
-         * Adds a point to the map and state.
-         */
-        function addPoint(latlng) {
-            if (points.length >= 2) return;
+        // ================= 5. GPS TRACKING & ACCURACY PERSISTENCE =================
 
-            points.push(latlng);
+        function startGpsTracking(targetIndex) {
+            if (!('geolocation' in navigator)) {
+                alert('Geolocation is not supported by your browser.');
+                return;
+            }
 
-            const markerColor = points.length === 1 ? 'green' : 'red';
-            const marker = L.marker(latlng, {
-                icon: L.icon({
-                    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${markerColor}.png`,
-                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-                })
-            }).addTo(map);
-            markers.push(marker);
+            gpsActive = true;
+            gpsTargetIndex = targetIndex;
+            currentGpsFix = null;
+            bestGpsFix = null;
+
+            // Switch to interactive tab and show live GPS panel
+            switchTab('interactive');
+            gpsLivePanel.classList.remove('hidden');
+            gpsButton.classList.add('hidden');
+
+            const targetName = targetIndex === 0 ? 'Point 1 (Start)' : 'Point 2 (Destination)';
+            gpsPanelTargetTitle.textContent = `Acquiring GPS for ${targetName}`;
+            gpsQualityBadge.textContent = 'Connecting...';
+            gpsQualityBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300';
+            gpsCurrentAccVal.textContent = '--';
+            gpsBestAccVal.textContent = '--';
+            gpsCoordsText.textContent = 'Requesting high-accuracy GPS fix...';
+            gpsAcceptBtn.disabled = true;
+            gpsAcceptLabel.textContent = `Accept ${targetIndex === 0 ? 'Point 1' : 'Point 2'}`;
+
+            // If acquiring Point 2 and Point 1 is already set, show live heading box
+            if (targetIndex === 1 && points[0]) {
+                gpsLiveHeadingBox.classList.remove('hidden');
+                gpsLiveHeadingVal.textContent = '--°';
+                gpsLiveUncertVal.textContent = '± --°';
+                gpsLiveRangePill.textContent = '--° – --°';
+                gpsLiveDistVal.textContent = '--';
+                gpsLiveUncertStatus.textContent = 'Waiting for GPS fix...';
+                gpsLiveUncertStatus.className = 'text-blue-200 font-semibold';
+            } else {
+                gpsLiveHeadingBox.classList.add('hidden');
+            }
+
+            // Options: enableHighAccuracy requests genuine GPS instead of cell tower only
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 30000,
+                maximumAge: 0
+            };
+
+            gpsWatchId = navigator.geolocation.watchPosition(
+                onGpsPositionUpdate,
+                onGpsPositionError,
+                options
+            );
+        }
+
+        function updateLiveHeadingUI(p1, fix) {
+            if (!p1 || !fix) return;
+
+            const D = calculateDistance(p1, fix);
+            const heading = calculateHeading(p1, fix);
+            const uncert = calculateAngleUncertainty(p1, fix, D);
+
+            gpsLiveHeadingBox.classList.remove('hidden');
+            gpsLiveHeadingVal.textContent = `${heading.toFixed(1)}°`;
+            gpsLiveDistVal.textContent = D < 1000 ? `${D.toFixed(1)} m` : `${(D / 1000).toFixed(2)} km`;
+
+            if (uncert.isIndeterminate) {
+                gpsLiveUncertVal.textContent = '± >90°';
+                gpsLiveRangePill.textContent = 'Indeterminate [0° – 360°]';
+                gpsLiveUncertStatus.textContent = '⚠️ Distance < Combined Error';
+                gpsLiveUncertStatus.className = 'text-amber-300 font-semibold';
+                collapsedText.textContent = `🧭 Live: ${heading.toFixed(1)}° ± >90° (Tap to expand)`;
+            } else if (uncert.deltaThetaMax === 0) {
+                gpsLiveUncertVal.textContent = '± 0.0°';
+                gpsLiveRangePill.textContent = `${heading.toFixed(1)}° (Exact)`;
+                gpsLiveUncertStatus.textContent = 'Exact';
+                gpsLiveUncertStatus.className = 'text-emerald-300 font-semibold';
+                collapsedText.textContent = `🧭 Live: ${heading.toFixed(1)}° (Tap to expand)`;
+            } else {
+                const minH = (heading - uncert.deltaThetaMax + 360) % 360;
+                const maxH = (heading + uncert.deltaThetaMax + 360) % 360;
+                gpsLiveUncertVal.textContent = `± ${uncert.deltaThetaMax.toFixed(1)}°`;
+                gpsLiveRangePill.textContent = `${minH.toFixed(1)}° – ${maxH.toFixed(1)}°`;
+
+                if (uncert.deltaThetaMax <= 5) {
+                    gpsLiveUncertStatus.textContent = 'High Precision';
+                    gpsLiveUncertStatus.className = 'text-emerald-300 font-semibold';
+                } else if (uncert.deltaThetaMax <= 15) {
+                    gpsLiveUncertStatus.textContent = 'Moderate Precision';
+                    gpsLiveUncertStatus.className = 'text-blue-100 font-semibold';
+                } else {
+                    gpsLiveUncertStatus.textContent = 'Coarse Accuracy';
+                    gpsLiveUncertStatus.className = 'text-amber-300 font-semibold';
+                }
+                collapsedText.textContent = `🧭 Live: ${heading.toFixed(1)}° ± ${uncert.deltaThetaMax.toFixed(1)}° (Tap to expand)`;
+            }
+        }
+
+        function onGpsPositionUpdate(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = Math.round(position.coords.accuracy * 10) / 10;
+            const timestamp = position.timestamp;
+
+            currentGpsFix = { lat, lng, accuracy, timestamp };
+
+            // "the best one should be persisted"
+            let isNewBest = false;
+            if (!bestGpsFix || accuracy < bestGpsFix.accuracy) {
+                bestGpsFix = { lat, lng, accuracy, timestamp };
+                isNewBest = true;
+            }
+
+            // Update UI readouts
+            gpsCurrentAccVal.textContent = `±${accuracy} m`;
+            gpsBestAccVal.textContent = `±${bestGpsFix.accuracy} m`;
+            gpsCoordsText.textContent = `${bestGpsFix.lat.toFixed(6)}, ${bestGpsFix.lng.toFixed(6)}`;
+
+            // Accuracy status badge
+            if (bestGpsFix.accuracy <= 10) {
+                gpsQualityBadge.textContent = `Good GPS (±${bestGpsFix.accuracy}m)`;
+                gpsQualityBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300';
+            } else if (bestGpsFix.accuracy <= 30) {
+                gpsQualityBadge.textContent = `Moderate (±${bestGpsFix.accuracy}m)`;
+                gpsQualityBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300';
+            } else {
+                gpsQualityBadge.textContent = `Coarse (±${bestGpsFix.accuracy}m)`;
+                gpsQualityBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-300';
+            }
+
+            gpsAcceptBtn.disabled = false;
+            gpsAcceptLabel.textContent = `Accept (±${bestGpsFix.accuracy}m)`;
+
+            // Update live heading & uncertainty in UI when acquiring Point 2
+            if (gpsTargetIndex === 1 && points[0]) {
+                updateLiveHeadingUI(points[0], bestGpsFix);
+            }
+
+            // Update live map layer (displaying persisted best fix, baseline, and cone)
+            updateLiveGpsMap(bestGpsFix, isNewBest);
+        }
+
+        function onGpsPositionError(error) {
+            console.warn(`Geolocation error: ${error.message} (code ${error.code})`);
+            gpsQualityBadge.textContent = 'GPS Warning';
+            gpsQualityBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-300';
+            gpsCoordsText.textContent = error.message || 'Unable to retrieve location';
+        }
+
+        function updateLiveGpsMap(fix, panTo) {
+            const latlng = L.latLng(fix.lat, fix.lng);
+
+            if (!liveGpsMarker) {
+                liveGpsMarker = L.marker(latlng, {
+                    icon: createGpsDivIcon(),
+                    zIndexOffset: 1000
+                }).addTo(map);
+            } else {
+                liveGpsMarker.setLatLng(latlng);
+            }
+
+            if (!liveGpsCircle) {
+                liveGpsCircle = L.circle(latlng, {
+                    radius: fix.accuracy,
+                    color: '#2563eb',
+                    weight: 2,
+                    dashArray: '4, 4',
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.18
+                }).addTo(map);
+            } else {
+                liveGpsCircle.setLatLng(latlng);
+                liveGpsCircle.setRadius(fix.accuracy);
+            }
+
+            // Live Heading line & uncertainty cone if Point 1 is already set
+            if (gpsTargetIndex === 1 && points[0]) {
+                const p1 = points[0];
+                const D = calculateDistance(p1, fix);
+                const heading = calculateHeading(p1, fix);
+                const uncert = calculateAngleUncertainty(p1, fix, D);
+
+                // Update live heading line
+                if (!liveHeadingLine) {
+                    liveHeadingLine = L.polyline([[p1.lat, p1.lng], [fix.lat, fix.lng]], {
+                        color: '#2563eb',
+                        weight: 3.5,
+                        dashArray: '6, 6',
+                        opacity: 0.85
+                    }).addTo(map);
+                } else {
+                    liveHeadingLine.setLatLngs([[p1.lat, p1.lng], [fix.lat, fix.lng]]);
+                }
+
+                // Update live uncertainty cone
+                if (!uncert.isIndeterminate && uncert.deltaThetaMax > 0 && uncert.deltaThetaMax < 90) {
+                    const coneRadius = Math.max(D * 1.18, D + uncert.r2 + 10);
+                    const startBearing = heading - uncert.deltaThetaMax;
+                    const endBearing = heading + uncert.deltaThetaMax;
+
+                    const numSteps = 32;
+                    const arcPoints = [];
+                    for (let i = 0; i <= numSteps; i++) {
+                        const b = startBearing + (endBearing - startBearing) * (i / numSteps);
+                        arcPoints.push(destinationPoint(p1, coneRadius, b));
+                    }
+
+                    const conePolygon = [
+                        [p1.lat, p1.lng],
+                        ...arcPoints.map(pt => [pt.lat, pt.lng]),
+                        [p1.lat, p1.lng]
+                    ];
+
+                    if (!liveUncertaintyCone) {
+                        liveUncertaintyCone = L.polygon(conePolygon, {
+                            color: '#2563eb',
+                            weight: 1.5,
+                            dashArray: '5, 5',
+                            fillColor: '#3b82f6',
+                            fillOpacity: 0.18
+                        }).addTo(map);
+                    } else {
+                        liveUncertaintyCone.setLatLngs(conePolygon);
+                    }
+                } else {
+                    if (liveUncertaintyCone) {
+                        map.removeLayer(liveUncertaintyCone);
+                        liveUncertaintyCone = null;
+                    }
+                }
+
+                // Fit map bounds to encompass Point 1, Point 1 Circle, live GPS Point 2, live Circle, and cone
+                if (panTo) {
+                    const layersToFit = [
+                        p1Marker,
+                        p1Circle,
+                        liveGpsMarker,
+                        liveGpsCircle,
+                        liveHeadingLine,
+                        liveUncertaintyCone
+                    ].filter(Boolean);
+
+                    if (layersToFit.length > 0) {
+                        const group = L.featureGroup(layersToFit);
+                        map.fitBounds(group.getBounds(), { maxZoom: 18, padding: [60, 60] });
+                    }
+                }
+            } else {
+                // Point 1 acquisition: fit to live GPS circle
+                if (panTo) {
+                    const circleBounds = liveGpsCircle.getBounds();
+                    map.fitBounds(circleBounds, { maxZoom: 18, padding: [60, 60] });
+                }
+            }
+        }
+
+        function stopGpsTracking() {
+            if (gpsWatchId !== null) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+            }
+            gpsActive = false;
+
+            if (liveGpsMarker) {
+                map.removeLayer(liveGpsMarker);
+                liveGpsMarker = null;
+            }
+            if (liveGpsCircle) {
+                map.removeLayer(liveGpsCircle);
+                liveGpsCircle = null;
+            }
+            if (liveHeadingLine) {
+                map.removeLayer(liveHeadingLine);
+                liveHeadingLine = null;
+            }
+            if (liveUncertaintyCone) {
+                map.removeLayer(liveUncertaintyCone);
+                liveUncertaintyCone = null;
+            }
+
+            gpsLiveHeadingBox.classList.add('hidden');
+            gpsLivePanel.classList.add('hidden');
+            gpsButton.classList.remove('hidden');
+        }
+
+        function acceptGpsPosition() {
+            if (!bestGpsFix) return;
+
+            const targetIdx = gpsTargetIndex;
+            const accepted = {
+                lat: bestGpsFix.lat,
+                lng: bestGpsFix.lng,
+                accuracy: bestGpsFix.accuracy,
+                source: 'gps'
+            };
+
+            stopGpsTracking();
+            setPoint(targetIdx, accepted);
+        }
+
+        function cancelGpsTracking() {
+            stopGpsTracking();
+            updateUI();
+        }
+
+        function resetGpsBest() {
+            if (currentGpsFix) {
+                bestGpsFix = { ...currentGpsFix };
+                gpsBestAccVal.textContent = `±${bestGpsFix.accuracy} m`;
+                gpsAcceptLabel.textContent = `Accept (±${bestGpsFix.accuracy}m)`;
+                if (gpsTargetIndex === 1 && points[0]) {
+                    updateLiveHeadingUI(points[0], bestGpsFix);
+                }
+                updateLiveGpsMap(bestGpsFix, true);
+            }
+        }
+
+        // ================= 6. STATE & UI MANAGEMENT =================
+
+        function setPoint(index, point) {
+            points[index] = point;
+
+            // Sync with manual textboxes
+            if (index === 0) {
+                inputP1Lat.value = point.lat.toFixed(6);
+                inputP1Lng.value = point.lng.toFixed(6);
+                inputP1Acc.value = point.accuracy;
+            } else if (index === 1) {
+                inputP2Lat.value = point.lat.toFixed(6);
+                inputP2Lng.value = point.lng.toFixed(6);
+                inputP2Acc.value = point.accuracy;
+            }
+
+            renderMapLayers();
+            updateUI();
+        }
+
+        function updateUI() {
+            const p1 = points[0];
+            const p2 = points[1];
+
+            // Update Point 1 chip
+            if (p1) {
+                p1Dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-600';
+                p1Text.textContent = `${p1.lat.toFixed(5)}°, ${p1.lng.toFixed(5)}°`;
+                p1AccBadge.textContent = `±${p1.accuracy.toFixed(1)}m`;
+                p1AccBadge.classList.remove('hidden');
+            } else {
+                p1Dot.className = 'w-2.5 h-2.5 rounded-full bg-gray-300';
+                p1Text.textContent = 'Not set';
+                p1AccBadge.classList.add('hidden');
+            }
+
+            // Update Point 2 chip
+            if (p2) {
+                p2Dot.className = 'w-2.5 h-2.5 rounded-full bg-rose-600';
+                p2Text.textContent = `${p2.lat.toFixed(5)}°, ${p2.lng.toFixed(5)}°`;
+                p2AccBadge.textContent = `±${p2.accuracy.toFixed(1)}m`;
+                p2AccBadge.classList.remove('hidden');
+            } else {
+                p2Dot.className = 'w-2.5 h-2.5 rounded-full bg-gray-300';
+                p2Text.textContent = 'Not set';
+                p2AccBadge.classList.add('hidden');
+            }
+
+            // Instructions and GPS buttons based on points count
+            if (!p1) {
+                instructions.textContent = 'Click the map or use GPS to set the starting point (Point 1).';
+                gpsButtonLabel.textContent = 'Use My Location (Point 1)';
+                gpsButton.disabled = false;
+                gpsButton.classList.remove('hidden');
+                resultsContent.classList.add('hidden');
+                collapsedText.textContent = '🧭 Heading Calculator (Tap to expand)';
+            } else if (p1 && !p2) {
+                instructions.textContent = 'Select destination point (Point 2) on the map or use GPS.';
+                gpsButtonLabel.textContent = 'Use My Location (Point 2)';
+                gpsButton.disabled = false;
+                gpsButton.classList.remove('hidden');
+                resultsContent.classList.add('hidden');
+                collapsedText.textContent = '🧭 Point 1 Set (Tap to expand)';
+            } else {
+                // Both points set: compute and display results
+                gpsButton.classList.add('hidden');
+                resultsContent.classList.remove('hidden');
+                instructions.textContent = 'Calculation complete. Both points and heading line are shown on the map.';
+
+                const D = calculateDistance(p1, p2);
+                const heading = calculateHeading(p1, p2);
+                const uncert = calculateAngleUncertainty(p1, p2, D);
+
+                headingResult.textContent = `${heading.toFixed(2)}°`;
+                p1AccResult.textContent = `±${p1.accuracy.toFixed(1)} m`;
+                p2AccResult.textContent = `±${p2.accuracy.toFixed(1)} m`;
+
+                if (D < 1000) {
+                    distanceResult.textContent = `${D.toFixed(1)} m`;
+                } else {
+                    distanceResult.textContent = `${(D / 1000).toFixed(2)} km (${Math.round(D)} m)`;
+                }
+
+                if (uncert.isIndeterminate) {
+                    headingUncertaintyResult.textContent = '± >90°';
+                    headingRangePill.textContent = 'Indeterminate [0° – 360°]';
+                    warningUncertainty.classList.remove('hidden');
+                    warningUncertaintyText.textContent = `Points are too close (${D.toFixed(1)} m) relative to combined inaccuracy (${(uncert.r1 + uncert.r2).toFixed(1)} m). The heading angle cannot be reliably determined.`;
+                    collapsedText.textContent = `🧭 Heading: ${heading.toFixed(1)}° ± >90° (Tap to expand)`;
+                } else if (uncert.deltaThetaMax === 0) {
+                    headingUncertaintyResult.textContent = '± 0.0°';
+                    headingRangePill.textContent = `${heading.toFixed(1)}° (Exact)`;
+                    warningUncertainty.classList.add('hidden');
+                    collapsedText.textContent = `🧭 Heading: ${heading.toFixed(1)}° (Tap to expand)`;
+                } else {
+                    const minAngle = (heading - uncert.deltaThetaMax + 360) % 360;
+                    const maxAngle = (heading + uncert.deltaThetaMax + 360) % 360;
+                    headingUncertaintyResult.textContent = `± ${uncert.deltaThetaMax.toFixed(1)}°`;
+                    headingRangePill.textContent = `${minAngle.toFixed(1)}° – ${maxAngle.toFixed(1)}°`;
+
+                    if (uncert.deltaThetaMax > 20) {
+                        warningUncertainty.classList.remove('hidden');
+                        warningUncertaintyText.textContent = `Moderate-to-high angle uncertainty (±${uncert.deltaThetaMax.toFixed(1)}°). For higher precision, increase distance between points or wait for better GPS accuracy.`;
+                    } else {
+                        warningUncertainty.classList.add('hidden');
+                    }
+                    collapsedText.textContent = `🧭 Heading: ${heading.toFixed(1)}° ± ${uncert.deltaThetaMax.toFixed(1)}° (Tap to expand)`;
+                }
+            }
+        }
+
+        function resetApp() {
+            stopGpsTracking();
+            points = [];
+            clearMapLayers();
+
+            inputP1Lat.value = '';
+            inputP1Lng.value = '';
+            inputP1Acc.value = '';
+            inputP2Lat.value = '';
+            inputP2Lng.value = '';
+            inputP2Acc.value = '';
+
+            updateUI();
+        }
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            if (tabName === 'interactive') {
+                tabInteractive.classList.remove('hidden');
+                tabManual.classList.add('hidden');
+                tabInteractiveBtn.className = 'flex-1 py-1.5 px-2.5 rounded-lg bg-white text-blue-600 shadow-sm transition-all flex items-center justify-center gap-1.5 font-bold';
+                tabManualBtn.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-gray-600 hover:text-gray-900 transition-all flex items-center justify-center gap-1.5';
+            } else {
+                tabInteractive.classList.add('hidden');
+                tabManual.classList.remove('hidden');
+                tabManualBtn.className = 'flex-1 py-1.5 px-2.5 rounded-lg bg-white text-blue-600 shadow-sm transition-all flex items-center justify-center gap-1.5 font-bold';
+                tabInteractiveBtn.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-gray-600 hover:text-gray-900 transition-all flex items-center justify-center gap-1.5';
+            }
+        }
+
+        function toggleCollapse() {
+            isCollapsed = !isCollapsed;
+            if (isCollapsed) {
+                dialogBody.classList.add('hidden');
+                collapsedSummary.classList.remove('hidden');
+                collapseIcon.style.transform = 'rotate(180deg)';
+            } else {
+                dialogBody.classList.remove('hidden');
+                collapsedSummary.classList.add('hidden');
+                collapseIcon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // ================= 7. EVENT LISTENERS =================
+
+        // Map click handling
+        map.on('click', (e) => {
+            if (gpsActive) return;
+
+            if (points.length >= 2) {
+                // Clicking map when both points exist starts fresh with Point 1
+                resetApp();
+                setPoint(0, {
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    accuracy: 0,
+                    source: 'map'
+                });
+                return;
+            }
+
+            if (points.length === 0) {
+                setPoint(0, {
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    accuracy: 0,
+                    source: 'map'
+                });
+            } else if (points.length === 1) {
+                setPoint(1, {
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    accuracy: 0,
+                    source: 'map'
+                });
+            }
+        });
+
+        // Tab Switching
+        tabInteractiveBtn.addEventListener('click', () => switchTab('interactive'));
+        tabManualBtn.addEventListener('click', () => switchTab('manual'));
+
+        // Collapse / Expand
+        toggleCollapseBtn.addEventListener('click', toggleCollapse);
+        collapsedSummary.addEventListener('click', toggleCollapse);
+
+        // Standard GPS button click
+        gpsButton.addEventListener('click', () => {
+            if (points.length === 0) {
+                startGpsTracking(0);
+            } else if (points.length === 1) {
+                startGpsTracking(1);
+            }
+        });
+
+        // Live GPS controls
+        gpsAcceptBtn.addEventListener('click', acceptGpsPosition);
+        gpsCancelBtn.addEventListener('click', cancelGpsTracking);
+        gpsResetBestBtn.addEventListener('click', resetGpsBest);
+
+        // Results buttons
+        resetButton.addEventListener('click', resetApp);
+        editCoordinatesBtn.addEventListener('click', () => switchTab('manual'));
+
+        // Manual Coordinates GPS buttons
+        manualP1GpsBtn.addEventListener('click', () => startGpsTracking(0));
+        manualP2GpsBtn.addEventListener('click', () => startGpsTracking(1));
+
+        // Manual Coordinates Clear buttons
+        manualP1ClearBtn.addEventListener('click', () => {
+            inputP1Lat.value = '';
+            inputP1Lng.value = '';
+            inputP1Acc.value = '';
+            points[0] = null;
+            points = points.filter(Boolean);
+            renderMapLayers();
+            updateUI();
+        });
+
+        manualP2ClearBtn.addEventListener('click', () => {
+            inputP2Lat.value = '';
+            inputP2Lng.value = '';
+            inputP2Acc.value = '';
+            if (points.length > 1) {
+                points.splice(1, 1);
+            }
+            renderMapLayers();
+            updateUI();
+        });
+
+        manualResetAllBtn.addEventListener('click', resetApp);
+
+        // Manual Apply Coordinates
+        manualApplyBtn.addEventListener('click', () => {
+            const lat1 = parseFloat(inputP1Lat.value);
+            const lng1 = parseFloat(inputP1Lng.value);
+            const acc1 = parseFloat(inputP1Acc.value) || 0;
+
+            const lat2 = parseFloat(inputP2Lat.value);
+            const lng2 = parseFloat(inputP2Lng.value);
+            const acc2 = parseFloat(inputP2Acc.value) || 0;
+
+            const hasP1 = !isNaN(lat1) && !isNaN(lng1);
+            const hasP2 = !isNaN(lat2) && !isNaN(lng2);
+
+            if (!hasP1 && !hasP2) {
+                alert('Please enter coordinates for Point 1 and/or Point 2.');
+                return;
+            }
+
+            if (hasP1 && (lat1 < -90 || lat1 > 90 || lng1 < -180 || lng1 > 180)) {
+                alert('Point 1 coordinates are invalid. Latitude must be in [-90, 90] and Longitude in [-180, 180].');
+                return;
+            }
+
+            if (hasP2 && (lat2 < -90 || lat2 > 90 || lng2 < -180 || lng2 > 180)) {
+                alert('Point 2 coordinates are invalid. Latitude must be in [-90, 90] and Longitude in [-180, 180].');
+                return;
+            }
+
+            points = [];
+            if (hasP1) {
+                points[0] = { lat: lat1, lng: lng1, accuracy: Math.max(0, acc1), source: 'manual' };
+            }
+            if (hasP2) {
+                if (!hasP1) {
+                    alert('Please enter Point 1 before setting Point 2.');
+                    return;
+                }
+                points[1] = { lat: lat2, lng: lng2, accuracy: Math.max(0, acc2), source: 'manual' };
+            }
+
+            renderMapLayers();
+            updateUI();
 
             if (points.length === 2) {
-                polyline = L.polyline(points, { color: 'blue' }).addTo(map);
+                switchTab('interactive');
             }
-            
-            updateUI();
-        }
+        });
 
-        /**
-         * Resets the application state to its initial form.
-         */
-        function resetApp() {
-            points = [];
-            markers.forEach(marker => map.removeLayer(marker));
-            markers = [];
-            if (polyline) {
-                map.removeLayer(polyline);
-                polyline = null;
-            }
-            updateUI();
-        }
-
-        /**
-         * Handles the logic for getting user's GPS location.
-         */
-        function handleGeolocation() {
-            if ('geolocation' in navigator) {
-                gpsButton.disabled = true;
-                gpsButton.textContent = 'Locating...';
-                instructionsElement.textContent = 'Requesting location...';
-
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const { latitude, longitude } = position.coords;
-                        const userLocation = L.latLng(latitude, longitude);
-                        map.setView(userLocation, 13);
-                        addPoint(userLocation);
-                        gpsButton.textContent = 'Use My Location';
-                    },
-                    (error) => {
-                        console.warn(`Geolocation error: ${error.message}`);
-                        gpsButton.textContent = 'Use My Location';
-                        // Re-enable the button only if the calculation isn't complete
-                        gpsButton.disabled = points.length >= 2; 
-                        updateUI(); // Restore previous instruction
-                    }
-                );
-            } else {
-                instructionsElement.textContent = 'GPS not supported on this device.';
-            }
-        }
-        
-        // --- 3. EVENT LISTENERS & INITIALIZATION ---
-        
-        map.on('click', (e) => addPoint(e.latlng));
-        resetButton.addEventListener('click', resetApp);
-        gpsButton.addEventListener('click', handleGeolocation);
-        
-        // Set initial UI state
+        // Initialize UI
         updateUI();
 
     </script>
 </body>
 </html>
-
-
-
