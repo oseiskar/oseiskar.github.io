@@ -122,22 +122,22 @@ export default function Home() {
             An interactive visualization of the Open Tree of Life using d3.js.
             The entire tree with approximately 2.3 million identified species as
             leaf nodes is browsable through the application."/>
-        <GithubProject
-          name="Puzzles"
-          repo="oseiskar/puzzles"
-          image="https://repository-images.githubusercontent.com/48693032/cc2b23c7-b738-410e-b013-b7eb547c29d1"
-          url="https://oseiskar.github.io/puzzles"
-          description="Archive of ad hoc algorithmic solutions to physical puzzle games. Mostly throwaway-quality code, some of which only runs with Python 2."/>
-        <GithubProject
-          name="Mersenne Twister"
-          repo="oseiskar/mersenne-twister"
-          image="img/mersenne-twister.png"
-          url="https://oseiskar.github.io/mersenne-twister"
-          description="
-            Can you spot the difference between the C random number generator
-            and Mersenne Twister?"/>
         {
           false && <div>
+            <GithubProject
+              name="Puzzles"
+              repo="oseiskar/puzzles"
+              image="https://repository-images.githubusercontent.com/48693032/cc2b23c7-b738-410e-b013-b7eb547c29d1"
+              url="https://oseiskar.github.io/puzzles"
+              description="Archive of ad hoc algorithmic solutions to physical puzzle games. Mostly throwaway-quality code, some of which only runs with Python 2."/>
+            <GithubProject
+              name="Mersenne Twister"
+              repo="oseiskar/mersenne-twister"
+              image="img/mersenne-twister.png"
+              url="https://oseiskar.github.io/mersenne-twister"
+              description="
+                Can you spot the difference between the C random number generator
+                and Mersenne Twister?"/>
             <ShortGithubProject
               name="Baro floor height"
               repo="oseiskar/BaroFloorHeight"
@@ -155,6 +155,43 @@ export default function Home() {
                 The code is saved on the phone and can later be displayed to QR code scanners."/>
           </div>
         }
+        </div>
+
+        <h1 className="mt-12">Vibe-coded tools</h1>
+        <p className="mb-6 text-sm sm:text-base xl:mr-40">
+          Unlike the projects at the top of the page, which are mostly hand-written,
+          the projects listed below are, for the most part, &ldquo;vibe-coded&rdquo;.
+          I have only included tools that I have used and found useful.
+        </p>
+        <div className="flex flex-wrap items-center justify-around xl:justify-between w-full">
+        <GithubProject
+          name="3D Room Designer"
+          image="img/vibe-coded-3d-interior-designer.jpg"
+          url="/vibe-coded/3d-interior-designer/"
+          description="
+            Draw furniture and walls as boxes on top of a floor plan image and see the room
+            in 3D with ambient occlusion. Supports walk mode, VR, and exporting to GLB."/>
+        <GithubProject
+          name="Heading Calculator"
+          image="img/vibe-coded-heading-calculator.jpg"
+          url="/vibe-coded/heading-calculator/"
+          description="
+            Compute the true-north heading between two points picked on a map, typed as coordinates
+            or measured with GPS, including an error bound derived from the GPS accuracy."/>
+        <GithubProject
+          name="STL Viewer"
+          image="img/vibe-coded-stl-viewer.jpg"
+          url="/vibe-coded/stl-viewer/"
+          description="
+            Drag and drop an STL file to view the 3D model in the browser, rendered with
+            ambient occlusion."/>
+        <GithubProject
+          name="Barcode Decoder"
+          image="img/vibe-coded-barcode-decoder.jpg"
+          url="/vibe-coded/barcode-decoder/"
+          description="
+            Upload an image and decode the barcode in it, optionally restricting the
+            search to a selected region of the image."/>
         </div>
       </section>
     </main>

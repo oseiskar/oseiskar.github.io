@@ -1,6 +1,7 @@
 import { FaGithub } from 'react-icons/fa';
 
 function ghStars(props, extraClass='') {
+  if (!props.repo) return null;
   return <a className={'text-2xl text-gray-500 ' + extraClass } href={ 'https://github.com/' + props.repo }>
     { props.stars &&
       <img className="mt-2 lg:mt-1" alt="GitHub Repo stars" src={ 'https://img.shields.io/github/stars/' + props.repo }/>
