@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL Viewer with Ambient Occlusion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #555f70; /* New background color */
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #drop-zone {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none; /* Allows clicks to pass through to the canvas */
+            transition: background-color 0.3s ease;
+        }
+        #drop-zone.drag-over {
+            background-color: rgba(0, 150, 255, 0.2);
+            border: 2px dashed #0096ff;
+        }
+        #drop-message {
+            color: #ffffff;
+            font-size: 2rem;
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Container for the Three.js renderer -->
+    <div id="container"></div>
+
+    <!-- Overlay for drag and drop functionality -->
+    <div id="drop-zone">
+        <div id="drop-message">
+            <h1 class="text-3xl font-bold mb-2">Drag & Drop STL File</h1>
+            <p class="text-lg text-gray-300">to render with ambient occlusion</p>
+        </div>
+    </div>
+
+    <!-- Three.js and related libraries -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { SAOPass } from 'three/addons/postprocessing/SAOPass.js';
+
+        let scene, camera, renderer, controls, composer, saoPass;
+        let currentModel;
+
+        const container = document.getElementById('container');
+        const dropZone = document.getElementById('drop-zone');
+        const dropMessage = document.getElementById('drop-message');
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x555f70); // New background color
+
+            // Camera - Z-is-up
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 20000); // Increased far plane
+            camera.up.set(0, 0, 1); // Set Z as the up-axis
+            camera.position.set(0, -10, 5); 
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = false;
+            container.appendChild(renderer.domElement);
+            
+            // --- FIX: Prevent browser's default drag behavior on the canvas ---
+            renderer.domElement.addEventListener('dragstart', (event) => event.preventDefault());
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); 
+            scene.add(ambientLight);
+
+            // Main key light
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            directionalLight.position.set(5, -10, 7.5); // Adjusted for Z-up
+            scene.add(directionalLight);
+
+            // Rim light from behind
+            const rimLight = new THREE.DirectionalLight(0x80a0ff, 1.5);
+            rimLight.position.set(-5, 10, 5); // Adjusted for Z-up
+            scene.add(rimLight);
+            
+            // Ground Plane has been removed.
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 0.1;
+            controls.maxDistance = 10000;
+
+            // Post-processing for Ambient Occlusion
+            setupPostProcessing();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            setupDragAndDrop();
+
+            // Start animation loop
+            animate();
+        }
+
+        // --- Post-Processing Setup ---
+        function setupPostProcessing() {
+            composer = new EffectComposer(renderer);
+            
+            const renderPass = new RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            saoPass = new SAOPass(scene, camera, false, true);
+            
+            saoPass.params.saoBias = 0.5;
+            saoPass.params.saoIntensity = 0.02;
+            saoPass.params.saoScale = 500;
+            saoPass.params.saoKernelRadius = 100;
+            saoPass.params.saoBlur = true;
+
+            composer.addPass(saoPass);
+        }
+
+        // --- Drag and Drop ---
+        function setupDragAndDrop() {
+            const body = document.body;
+            body.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+
+            body.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            });
+
+            body.addEventListener('drop', (event) => {
+                event.preventDefault();
+                dropZone.classList.remove('drag-over');
+                
+                const file = event.dataTransfer.files[0];
+                if (file && file.name.toLowerCase().endsWith('.stl')) {
+                    loadSTL(file);
+                } else {
+                    console.error("Invalid file type. Please drop an STL file.");
+                }
+            });
+        }
+
+        // --- STL Loading and Processing ---
+        function loadSTL(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const contents = e.target.result;
+                const loader = new STLLoader();
+                const geometry = loader.parse(contents);
+                
+                if (currentModel) {
+                    scene.remove(currentModel);
+                }
+
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0xF5DEB3,
+                    metalness: 0.1,
+                    roughness: 0.85,
+                });
+                
+                currentModel = new THREE.Mesh(geometry, material);
+                
+                // Removed the rotation, as the user's STLs are already Z-up
+                // currentModel.rotation.x = -Math.PI / 2;
+
+                frameObject(currentModel);
+                
+                scene.add(currentModel);
+
+                dropMessage.style.display = 'none';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function frameObject(model) {
+            // 1. Get the unscaled bounding box and center the model
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.sub(center);
+
+            // 2. Get object's original size
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+
+            // 3. Calculate the distance required to fit the object in the view
+            const fov = camera.fov * (Math.PI / 180);
+            const fitHeightDistance = maxDim / (2 * Math.tan(fov / 2));
+            const fitWidthDistance = fitHeightDistance / camera.aspect;
+            const distance = Math.max(fitHeightDistance, fitWidthDistance);
+
+            // --- Apply the user's requested distance multiplier ---
+            const finalDistance = distance * 2;
+
+            // 4. Position the camera
+            const direction = new THREE.Vector3(0, -1, 0.5).normalize();
+            camera.position.copy(direction.multiplyScalar(finalDistance));
+
+            // Ensure model is not scaled, as camera distance now handles framing
+            model.scale.set(1, 1, 1);
+
+            controls.target.copy(model.position);
+            controls.update();
+        }
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            composer.render();
+        }
+
+        // --- Start the application ---
+        init();
+    </script>
+</body>
+</html>
+
