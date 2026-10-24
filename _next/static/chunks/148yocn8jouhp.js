@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,2981,(o,t,i)=>{let _="/github-project";(window.__NEXT_P=window.__NEXT_P||[]).push([_,()=>o.r(9570)]),t.hot&&t.hot.dispose(function(){window.__NEXT_P.push([_])})}]);
