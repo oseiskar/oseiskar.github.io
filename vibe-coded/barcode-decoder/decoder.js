@@ -435,9 +435,10 @@
     /*
      * For every slot: SSE per candidate (if full) and Sqq. Module coordinate
      * u maps to profile position x by a 1D homography (perspective) that
-     * fixes the ends: t = u / U, x = x0 + (x1 - x0) t (1 + persp) / (1 + persp t)
+     * fixes the ends: t = u / U, x = x0 + (x1 - x0) t (1 + persp) / (1 + persp t).
+     * shift: move all slots by this many modules (for local alignment)
      */
-    slotCosts(x0, x1, sigma, spread, persp, full) {
+    slotCosts(x0, x1, sigma, spread, persp, full, shift = 0) {
       const U = this.U, p = this.smoothed((x1 - x0) / U);
       const out = [];
       let sumMin = 0, sumSqq = 0;
@@ -445,7 +446,7 @@
         const { T, Stt, L, C } = renderTemplates(s, sigma, spread);
         const q = new Float64Array(L);
         for (let k = 0; k < L; k++) {
-          const t = (s.start - 0.5 + (k + 0.5) / R) / U;
+          const t = (s.start - 0.5 + (k + 0.5) / R + shift) / U;
           q[k] = interp1(p, x0 + (x1 - x0) * t * (1 + persp) / (1 + persp * t));
         }
         detrend(q);
@@ -523,6 +524,29 @@
         }
       }
       return Object.assign({ cost: c }, prm);
+    }
+
+    /*
+     * Slot costs after local alignment: each slot may shift by up to 0.3
+     * modules (paper curvature, lens distortion: not exactly a homography).
+     * Per slot, the shift where the best candidate fits best is used for all
+     * candidates.
+     */
+    alignedSlotCosts(fit) {
+      const shifts = [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3];
+      const perShift = shifts.map(sh =>
+        this.slotCosts(fit.x0, fit.x1, fit.sigma, fit.spread, fit.persp, true, sh));
+      const sc = [], chosen = [];
+      for (let i = 0; i < this.slots.length; i++) {
+        let bj = 0, bv = Infinity;
+        perShift.forEach((ps, j) => {
+          const v = Math.min(...ps[i].sse) / Math.max(ps[i].sqq, 1e-12);
+          if (v < bv) { bv = v; bj = j; }
+        });
+        sc.push(perShift[bj][i]);
+        chosen.push(shifts[bj]);
+      }
+      return { sc, shifts: chosen };
     }
 
     gridX(fit, u) {
@@ -724,7 +748,7 @@
     };
   }
 
-  function fittedCurve(model, fit, choices) {
+  function fittedCurve(model, fit, choices, shifts) {
     // the synthesized signal for the chosen symbols (for visualization)
     const p = model.p, xs = [], ys = [];
     model.slots.forEach((s, si) => {
@@ -732,7 +756,7 @@
       const ch = choices[si];
       const x = new Float64Array(L), q = new Float64Array(L);
       for (let k = 0; k < L; k++) {
-        x[k] = model.gridX(fit, s.start - 0.5 + (k + 0.5) / R);
+        x[k] = model.gridX(fit, s.start - 0.5 + (k + 0.5) / R + shifts[si]);
         q[k] = interp1(p, x[k]);
       }
       const qc = detrend(Float64Array.from(q));
@@ -774,10 +798,10 @@
       if (best === null || fit.cost < best.fit.cost) best = { fit, model, U };
     }
     const { fit, model, U } = best;
-    const sc = model.slotCosts(fit.x0, fit.x1, fit.sigma, fit.spread, fit.persp, true);
+    const { sc, shifts } = model.alignedSlotCosts(fit);
     const dec = kind === 'code128' ? decodeCode128(sc) : decodeEan(sc, kind);
     const att = {
-      kind, e0, e1, wLeft: wl, wRight: wr, U, fit,
+      kind, e0, e1, wLeft: wl, wRight: wr, U, fit, shifts,
       modulePx: (fit.x1 - fit.x0) / U, text: null, accepted: false,
     };
     if (dec !== null) {
@@ -793,7 +817,7 @@
     // the fit must be good overall, any symbol the checksum forced to change
     // must have been a near-tie relative to that slot's own variance, and the
     // decode must be well separated from alternatives relative to the noise
-    return a.text !== null && a.frac < 0.15 && a.slotPenMax < 0.05 && a.margin2 > 100;
+    return a.text !== null && a.frac < 0.15 && a.slotPenMax < 0.05 && a.margin2 > 128;
   }
 
   function strong(a) {
@@ -834,7 +858,7 @@
           a.direction = direction;
           if (opts.trace) {
             if (a.model) {
-              a.curve = fittedCurve(a.model, a.fit, a.choices);
+              a.curve = fittedCurve(a.model, a.fit, a.choices, a.shifts);
               a.moduleEdges = Array.from({ length: a.U + 1 }, (_, u) => a.model.gridX(a.fit, u));
             }
             a.profile = d;
