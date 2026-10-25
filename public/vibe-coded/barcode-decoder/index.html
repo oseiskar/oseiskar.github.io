@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Barcode Decoder</title>
 
 <style>
@@ -60,6 +60,10 @@ body {
         sans-serif;
 }
 
+body.overlay-open {
+    overflow: hidden;
+}
+
 .app {
     max-width: 1200px;
     margin: 0 auto;
@@ -110,6 +114,7 @@ button,
 .button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 10px;
     padding: 10px 14px;
@@ -158,34 +163,14 @@ select {
     min-height: 44px;
 }
 
-.canvas-wrap {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    background: #000;
-    line-height: 0;
-}
-
-.canvas-wrap.empty {
-    display: none;
-}
-
-#canvas {
-    display: block;
-    width: 100%;
-    height: auto;
-    cursor: crosshair;
-    touch-action: none;
-}
-
 .status {
-    margin-top: 12px;
+    margin: 12px 0;
     color: var(--muted);
     font-size: .95rem;
 }
 
 .result-card {
-    margin-top: 16px;
+    margin: 0 0 16px;
     padding: 16px;
     border-radius: 12px;
     border: 1px solid var(--success-border);
@@ -224,12 +209,29 @@ select {
 }
 
 .error-box {
-    margin-top: 16px;
+    margin: 0 0 16px;
     padding: 14px;
     border-radius: 12px;
     border: 1px solid var(--error-border);
     background: var(--error-bg);
     color: var(--error-text);
+}
+
+.photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* the photo on the page is only an image: touches scroll the page */
+#photo {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #000;
 }
 
 .internals {
@@ -293,6 +295,108 @@ tr.accepted td {
     font-weight: 600;
 }
 
+/* --- full-screen views: taking the photo, drawing the box */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    color: #fff;
+}
+
+.stage {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.stage video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+#editCanvas {
+    display: block;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.overlay-msg {
+    padding: 10px 16px 0;
+    text-align: center;
+    font-size: .95rem;
+    min-height: 1.5em;
+    color: #e2e8f0;
+}
+
+.overlay-msg.error {
+    color: #fca5a5;
+}
+
+.overlay-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+
+.overlay-bar > * {
+    flex: 1 1 0;
+}
+
+.overlay-bar .center {
+    display: flex;
+    justify-content: center;
+}
+
+.overlay-bar .right {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.overlay-bar button.ghost {
+    background: rgba(255,255,255,.15);
+}
+
+.overlay-bar button.ghost:hover:not(:disabled) {
+    background: rgba(255,255,255,.25);
+}
+
+.overlay select {
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    border-color: transparent;
+    min-width: 0;
+}
+
+.overlay select option {
+    color: #000;
+}
+
+.shutter {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    padding: 0;
+    background: #fff;
+    border: 5px solid rgba(255,255,255,.4);
+    background-clip: padding-box;
+}
+
+.shutter:hover:not(:disabled) {
+    background: #e2e8f0;
+    background-clip: padding-box;
+}
+
 [hidden] {
     display: none !important;
 }
@@ -305,13 +409,12 @@ tr.accepted td {
 
     .copy-btn {
         width: 100%;
-        justify-content: center;
     }
 
     .toolbar > button,
-    .toolbar > .button {
+    .toolbar > .button,
+    .photo-actions > button {
         flex: 1 1 auto;
-        justify-content: center;
     }
 }
 </style>
@@ -324,33 +427,25 @@ tr.accepted td {
         <h1>Barcode Decoder</h1>
 
         <div class="subtitle">
-            Reads EAN-13 / UPC-A, EAN-8 and Code 128 barcodes. Upload a photo or use
-            your camera, then drag a box around the barcode (bars roughly vertical).
-            Works with blurry and low-resolution images. Everything runs locally in
-            your browser.
+            Reads EAN-13 / UPC-A, EAN-8 and Code 128 barcodes. Take a photo or upload one,
+            then drag a box around the barcode if it is not found automatically (bars roughly
+            vertical). Works with blurry and low-resolution images. Everything runs locally
+            in your browser.
         </div>
 
         <div class="toolbar">
+            <button id="cameraBtn">Take photo</button>
             <label class="button">
                 Upload image
                 <input type="file" id="fileInput" accept="image/*" hidden>
             </label>
-            <button id="cameraBtn">Use camera</button>
-            <select id="cameraSelect" hidden aria-label="Camera"></select>
-            <button id="rescanBtn" class="secondary" hidden>Scan again</button>
             <label class="check">
                 <input type="checkbox" id="internalsCheck">
                 Show internals
             </label>
         </div>
 
-        <div id="canvasWrap" class="canvas-wrap empty">
-            <canvas id="canvas"></canvas>
-        </div>
-
-        <div id="status" class="status">
-            Upload an image or start the camera.
-        </div>
+        <div id="status" class="status" hidden></div>
 
         <div id="resultCard" class="result-card" hidden>
             <div class="result-header">
@@ -365,10 +460,18 @@ tr.accepted td {
 
         <div id="errorBox" class="error-box" hidden></div>
 
+        <div id="photoSection" hidden>
+            <div class="photo-actions">
+                <button id="adjustBtn" class="secondary">Adjust box</button>
+                <button id="retakeBtn" class="secondary" hidden>Retake photo</button>
+            </div>
+            <canvas id="photo"></canvas>
+        </div>
+
         <section id="internals" class="internals" hidden>
             <h2>What the decoder saw</h2>
             <p>
-                Overlay:
+                Overlay on the photo:
                 <span class="swatch" style="border-color:#3b82f6"></span>your box
                 <span class="swatch" style="border-color:#06b6d4"></span>sampling frame
                 (along the barcode axis, following the bar directions)
@@ -395,33 +498,58 @@ tr.accepted td {
     </div>
 </div>
 
+<!-- full-screen view 1: take the photo -->
+<div id="captureView" class="overlay" hidden>
+    <div class="stage">
+        <video id="video" playsinline muted></video>
+    </div>
+    <div id="captureMsg" class="overlay-msg"></div>
+    <div class="overlay-bar">
+        <div><button id="captureCloseBtn" class="ghost">Cancel</button></div>
+        <div class="center">
+            <button id="shutterBtn" class="shutter" aria-label="Take photo" disabled></button>
+        </div>
+        <div class="right">
+            <select id="cameraSelect" hidden aria-label="Camera"></select>
+        </div>
+    </div>
+</div>
+
+<!-- full-screen view 2: draw the box -->
+<div id="editView" class="overlay" hidden>
+    <div id="editStage" class="stage">
+        <canvas id="editCanvas"></canvas>
+    </div>
+    <div id="editMsg" class="overlay-msg"></div>
+    <div class="overlay-bar">
+        <div><button id="editCloseBtn" class="ghost">Cancel</button></div>
+        <div class="right">
+            <button id="editRetakeBtn" class="ghost">Retake photo</button>
+        </div>
+    </div>
+</div>
+
 <!-- absolute paths: the dev server serves this page without the trailing slash -->
 <script src="/vibe-coded/barcode-decoder/decoder.js"></script>
 <script>
 'use strict';
 
-const MAX_DISPLAY_WIDTH = 1280;
+const MAX_PHOTO_WIDTH = 1280;
 const MAX_DECODE_BOX_WIDTH = 1200; // downscale larger boxes before decoding
-const LIVE_TIME_LIMIT_MS = 600;
+const AUTO_TIME_LIMIT_MS = 2500;   // automatic whole-image attempt
 const FORMATS = { ean13: 'EAN-13', ean8: 'EAN-8', code128: 'Code 128' };
 
 const $ = id => document.getElementById(id);
-const canvas = $('canvas');
-const ctx = canvas.getContext('2d');
-const statusEl = $('status');
 
 // --- state
-let mode = 'none';         // 'none' | 'still' | 'live'
-let still = null;          // image or canvas being shown when not live
-let video = null;
-let stream = null;
-let srcW = 0, srcH = 0;    // source (image / video frame) size
-let box = null;            // [x0, y0, x1, y1] in source pixels
-let drag = null;
-let last = null;           // {trace, map, result} of the latest decode
+let still = null;          // the photo: image or canvas
+let fromCamera = false;
+let srcW = 0, srcH = 0;
+let box = null;            // [x0, y0, x1, y1] in photo pixels, null = whole image
+let last = null;           // {trace, map, result, box} of the latest decode
 let lastValue = '';
-let busy = false;
-let liveToken = 0;
+let stream = null;
+let decodeSeq = 0;         // newer decodes make older ones stale
 
 // --- worker
 
@@ -434,14 +562,14 @@ worker.onmessage = e => {
     if (cb) cb(e.data);
 };
 
-function runDecode(source, box, timeLimitMs) {
+function runDecode(source, b, timeLimitMs) {
     // decode the region around the box (with margin for the quiet zones),
     // downscaled if it is very large
-    const bw = box[2] - box[0], bh = box[3] - box[1];
-    const rx0 = Math.max(0, Math.floor(box[0] - 0.15 * bw));
-    const ry0 = Math.max(0, Math.floor(box[1] - 0.15 * bh));
-    const rx1 = Math.min(srcW, Math.ceil(box[2] + 0.15 * bw));
-    const ry1 = Math.min(srcH, Math.ceil(box[3] + 0.15 * bh));
+    const bw = b[2] - b[0], bh = b[3] - b[1];
+    const rx0 = Math.max(0, Math.floor(b[0] - 0.15 * bw));
+    const ry0 = Math.max(0, Math.floor(b[1] - 0.15 * bh));
+    const rx1 = Math.min(srcW, Math.ceil(b[2] + 0.15 * bw));
+    const ry1 = Math.min(srcH, Math.ceil(b[3] + 0.15 * bh));
     const s = Math.min(1, MAX_DECODE_BOX_WIDTH / bw);
     const cw = Math.max(1, Math.round((rx1 - rx0) * s));
     const ch = Math.max(1, Math.round((ry1 - ry0) * s));
@@ -452,7 +580,7 @@ function runDecode(source, box, timeLimitMs) {
     wctx.drawImage(source, rx0, ry0, rx1 - rx0, ry1 - ry0, 0, 0, cw, ch);
     const gray = BarcodeDecoder.toGray(wctx.getImageData(0, 0, cw, ch).data, cw, ch);
     const map = { ox: rx0, oy: ry0, s };
-    const rbox = [(box[0] - rx0) * s, (box[1] - ry0) * s, (box[2] - rx0) * s, (box[3] - ry0) * s];
+    const rbox = [(b[0] - rx0) * s, (b[1] - ry0) * s, (b[2] - rx0) * s, (b[3] - ry0) * s];
     return new Promise(resolve => {
         const id = nextId++;
         pending.set(id, out => resolve(Object.assign(out, { map })));
@@ -462,91 +590,39 @@ function runDecode(source, box, timeLimitMs) {
     });
 }
 
-// --- display
-
-function setSource(w, h) {
-    srcW = w;
-    srcH = h;
-    const scale = Math.min(1, MAX_DISPLAY_WIDTH / w);
-    canvas.width = Math.round(w * scale);
-    canvas.height = Math.round(h * scale);
-    $('canvasWrap').classList.remove('empty');
-}
-
-const dispScale = () => canvas.width / srcW;
-
-function render() {
-    if (!srcW) return;
-    const source = mode === 'live' ? video : still;
-    if (source) ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const k = dispScale();
-    if ($('internalsCheck').checked && last && last.trace) drawTraceOverlay(last.trace, last.map, k);
-    if (box) {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#3b82f6';
-        ctx.fillStyle = 'rgba(59,130,246,0.12)';
-        const [x0, y0, x1, y1] = box.map(v => v * k);
-        ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-        ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-    }
-}
-
-function liveRenderLoop() {
-    if (mode !== 'live') return;
-    render();
-    requestAnimationFrame(liveRenderLoop);
-}
-
-// --- results
-
-function showError(msg) {
-    $('errorBox').textContent = msg;
-    $('errorBox').hidden = !msg;
-}
-
-function showResult(result) {
-    if (!result) {
-        $('resultCard').hidden = true;
+/*
+ * Decode the photo with the current box (or the whole photo). On success,
+ * show the result page; otherwise open / stay in the box editor.
+ */
+async function decodeCurrent(auto) {
+    const seq = ++decodeSeq;
+    const b = box || [0, 0, srcW, srcH];
+    const usedBox = box;
+    const out = await runDecode(still, b, auto ? AUTO_TIME_LIMIT_MS : 0);
+    if (seq !== decodeSeq) return; // a newer box was drawn meanwhile
+    last = Object.assign(out, { box: usedBox });
+    if (out.result) {
+        closeOverlays();
+        showResultPage();
         return;
     }
-    lastValue = result.text;
-    $('decodedText').textContent = result.text;
-    let fmt = FORMATS[result.kind] || result.kind;
-    if (result.kind === 'ean13' && result.text[0] === '0') {
-        fmt += ' (UPC-A ' + result.text.slice(1) + ')';
-    }
-    $('decodedFormat').textContent = 'Format: ' + fmt;
-    $('resultCard').hidden = false;
+    if ($('editView').hidden) openEditor();
+    setEditMsg(out.error ? 'Decoder error: ' + out.error :
+        usedBox ? 'No barcode found in the box. Cover the whole barcode, including a bit ' +
+            'of the blank margin on both sides, or retake the photo.'
+            : 'Drag a box around the barcode.', !!usedBox || !!out.error);
+    renderEditor();
 }
 
-// --- still images (uploads and frozen camera frames)
+// --- photo sources
 
-async function decodeStill() {
-    if (!still || busy) return;
-    busy = true;
-    showError('');
-    statusEl.textContent = 'Decoding…';
-    const b = box || [0, 0, srcW, srcH];
-    const t = performance.now();
-    const out = await runDecode(still, b, 0);
-    busy = false;
-    last = out;
-    showResult(out.result);
-    if (out.error) showError('Decoder error: ' + out.error);
-    if (out.result) {
-        statusEl.textContent = `Barcode found in ${Math.round(performance.now() - t)} ms.` +
-            ' Drag a new box to decode another one.';
-    } else {
-        statusEl.textContent = 'No barcode found.';
-        if (!out.error) {
-            showError(box
-                ? 'No barcode found in the box. Try a box that covers the whole barcode, ' +
-                  'including a bit of the blank margin on both sides.'
-                : 'No barcode found. Drag a box around the barcode.');
-        }
-    }
-    render();
-    updateInternals();
+function setPhoto(source, w, h, camera) {
+    still = source;
+    srcW = w;
+    srcH = h;
+    fromCamera = camera;
+    box = null;
+    last = null;
 }
 
 $('fileInput').addEventListener('change', e => {
@@ -564,48 +640,43 @@ function loadImageFile(file) {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-        stopCamera();
-        mode = 'still';
-        still = img;
-        box = null;
-        last = null;
-        setSource(img.naturalWidth, img.naturalHeight);
-        render();
-        decodeStill();
+        closeOverlays();
+        setPhoto(img, img.naturalWidth, img.naturalHeight, false);
+        hideResult();
+        setStatus('Looking for a barcode…');
+        decodeCurrent(true);
     };
     img.onerror = () => showError('Could not load the image.');
     img.src = url;
 }
 
-// --- camera
+// --- view 1: camera
 
-async function startCamera(deviceId) {
-    showError('');
+async function openCamera(deviceId) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showError('Camera access is not available in this browser (it requires HTTPS).');
         return;
     }
-    stopCamera();
-    const video_ = { width: { ideal: 1920 }, height: { ideal: 1080 } };
-    if (deviceId) video_.deviceId = { exact: deviceId };
-    else video_.facingMode = { ideal: 'environment' };
+    closeOverlays();
+    showOverlay('captureView');
+    $('captureMsg').textContent = 'Starting camera…';
+    $('shutterBtn').disabled = true;
+    const constraints = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (deviceId) constraints.deviceId = { exact: deviceId };
+    else constraints.facingMode = { ideal: 'environment' };
     try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: video_, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
     } catch (err) {
+        closeOverlays();
         showError('Could not open the camera: ' + err.message);
         return;
     }
-    video = document.createElement('video');
-    video.playsInline = true;
-    video.muted = true;
+    const video = $('video');
     video.srcObject = stream;
     await video.play();
-    await new Promise(r => video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, { once: true }));
-    setSource(video.videoWidth, video.videoHeight);
-    // default guide box: centered, wide
-    box = [0.1 * srcW, 0.35 * srcH, 0.9 * srcW, 0.65 * srcH];
+    $('captureMsg').textContent = 'Fill the view with the barcode, bars vertical, and hold steady.';
+    $('shutterBtn').disabled = false;
     await populateCameras(stream.getVideoTracks()[0].getSettings().deviceId);
-    startLive();
 }
 
 async function populateCameras(currentId) {
@@ -622,108 +693,207 @@ async function populateCameras(currentId) {
     sel.hidden = cams.length < 2;
 }
 
-$('cameraSelect').addEventListener('change', e => startCamera(e.target.value));
-
 function stopCamera() {
-    liveToken++;
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
-    video = null;
-    $('cameraSelect').hidden = true;
-    $('rescanBtn').hidden = true;
+    $('video').srcObject = null;
 }
 
-function startLive() {
-    mode = 'live';
-    last = null;
-    showResult(null);
-    showError('');
-    $('rescanBtn').hidden = true;
-    statusEl.textContent = 'Scanning… Point the camera so the barcode fills the blue box ' +
-        '(drag to change the box).';
-    liveRenderLoop();
-    liveScanLoop(++liveToken);
+function capture() {
+    const video = $('video');
+    if (!video.videoWidth) return;
+    const snap = document.createElement('canvas');
+    snap.width = video.videoWidth;
+    snap.height = video.videoHeight;
+    snap.getContext('2d').drawImage(video, 0, 0);
+    stopCamera();
+    setPhoto(snap, snap.width, snap.height, true);
+    hideResult();
+    openEditor();
+    setEditMsg('Looking for a barcode… or drag a box around it.');
+    decodeCurrent(true);
 }
 
-async function liveScanLoop(token) {
-    let frames = 0;
-    while (token === liveToken && mode === 'live') {
-        if (!video || video.readyState < 2 || !box) {
-            await new Promise(r => setTimeout(r, 100));
-            continue;
-        }
-        // decode a snapshot, so that the frame can be shown frozen on success
-        const snap = document.createElement('canvas');
-        snap.width = srcW;
-        snap.height = srcH;
-        snap.getContext('2d').drawImage(video, 0, 0);
-        const out = await runDecode(snap, box, LIVE_TIME_LIMIT_MS);
-        if (token !== liveToken) return;
-        frames++;
-        last = out;
-        if (out.error) showError('Decoder error: ' + out.error);
-        if (out.result) {
-            mode = 'still';
-            still = snap;
-            showResult(out.result);
-            if (navigator.vibrate) navigator.vibrate(80);
-            statusEl.textContent = 'Barcode found. Drag a new box to decode another one ' +
-                'from this frame, or scan again.';
-            $('rescanBtn').hidden = false;
-            render();
-            updateInternals();
-            return;
-        }
-        statusEl.textContent = `Scanning… (${frames} frames tried)` +
-            ' Fill the blue box with the barcode, keep bars vertical.';
-        if ($('internalsCheck').checked) updateInternals();
+$('cameraBtn').addEventListener('click', () => openCamera());
+$('shutterBtn').addEventListener('click', capture);
+$('cameraSelect').addEventListener('change', e => openCamera(e.target.value));
+$('captureCloseBtn').addEventListener('click', closeOverlays);
+
+// --- view 2: box editor
+
+const editCanvas = $('editCanvas');
+const ectx = editCanvas.getContext('2d');
+let drag = null;
+
+function openEditor() {
+    showOverlay('editView');
+    $('editRetakeBtn').hidden = !fromCamera;
+    renderEditor();
+}
+
+function setEditMsg(msg, isError) {
+    $('editMsg').textContent = msg;
+    $('editMsg').classList.toggle('error', !!isError);
+}
+
+function renderEditor() {
+    if ($('editView').hidden || !still) return;
+    // fit the photo in the stage
+    const stage = $('editStage').getBoundingClientRect();
+    const k = Math.min(stage.width / srcW, stage.height / srcH);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    editCanvas.style.width = Math.round(srcW * k) + 'px';
+    editCanvas.style.height = Math.round(srcH * k) + 'px';
+    editCanvas.width = Math.round(srcW * k * dpr);
+    editCanvas.height = Math.round(srcH * k * dpr);
+    const s = editCanvas.width / srcW;
+    ectx.drawImage(still, 0, 0, editCanvas.width, editCanvas.height);
+    if (box) {
+        const [x0, y0, x1, y1] = box.map(v => v * s);
+        ectx.fillStyle = 'rgba(0,0,0,0.45)';
+        ectx.fillRect(0, 0, editCanvas.width, y0);
+        ectx.fillRect(0, y1, editCanvas.width, editCanvas.height - y1);
+        ectx.fillRect(0, y0, x0, y1 - y0);
+        ectx.fillRect(x1, y0, editCanvas.width - x1, y1 - y0);
+        ectx.lineWidth = 2 * dpr;
+        ectx.strokeStyle = '#3b82f6';
+        ectx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     }
 }
 
-$('cameraBtn').addEventListener('click', () => startCamera());
-$('rescanBtn').addEventListener('click', () => {
-    if (video) startLive();
-});
-
-// --- box selection
-
 function toSource(e) {
-    const r = canvas.getBoundingClientRect();
+    const r = editCanvas.getBoundingClientRect();
     return [
         Math.min(Math.max((e.clientX - r.left) / r.width * srcW, 0), srcW),
         Math.min(Math.max((e.clientY - r.top) / r.height * srcH, 0), srcH),
     ];
 }
 
-canvas.addEventListener('pointerdown', e => {
-    if (!srcW) return;
-    canvas.setPointerCapture(e.pointerId);
-    drag = { start: toSource(e), prev: box };
+editCanvas.addEventListener('pointerdown', e => {
+    editCanvas.setPointerCapture(e.pointerId);
+    drag = { start: toSource(e), prev: box, moved: false };
 });
 
-canvas.addEventListener('pointermove', e => {
+editCanvas.addEventListener('pointermove', e => {
     if (!drag) return;
     const [x, y] = toSource(e);
     const [sx, sy] = drag.start;
     box = [Math.min(sx, x), Math.min(sy, y), Math.max(sx, x), Math.max(sy, y)];
-    if (mode !== 'live') render();
+    drag.moved = true;
+    renderEditor();
 });
 
 function endDrag() {
     if (!drag) return;
-    const minSize = 12 / dispScale();
-    if (!box || box === drag.prev || box[2] - box[0] < minSize || box[3] - box[1] < minSize) {
-        box = drag.prev; // a tap or tiny drag: keep the previous box
-        drag = null;
-        if (mode !== 'live') render();
-        return;
-    }
+    const minSize = 12 * srcW / editCanvas.getBoundingClientRect().width;
+    const ok = drag.moved && box && box[2] - box[0] >= minSize && box[3] - box[1] >= minSize;
+    if (!ok) box = drag.prev; // a tap or a tiny drag: keep the previous box
     drag = null;
-    if (mode === 'still') decodeStill();
+    renderEditor();
+    if (ok) {
+        setEditMsg('Decoding…');
+        decodeCurrent(false);
+    }
 }
 
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
+editCanvas.addEventListener('pointerup', endDrag);
+editCanvas.addEventListener('pointercancel', endDrag);
+window.addEventListener('resize', renderEditor);
+
+$('editCloseBtn').addEventListener('click', () => {
+    decodeSeq++; // ignore pending decodes
+    closeOverlays();
+    showResultPage();
+});
+$('editRetakeBtn').addEventListener('click', () => {
+    decodeSeq++;
+    openCamera($('cameraSelect').value || undefined);
+});
+
+// --- overlays
+
+function showOverlay(id) {
+    for (const v of ['captureView', 'editView']) $(v).hidden = v !== id;
+    document.body.classList.add('overlay-open');
+}
+
+function closeOverlays() {
+    stopCamera();
+    $('captureView').hidden = true;
+    $('editView').hidden = true;
+    document.body.classList.remove('overlay-open');
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !($('captureView').hidden && $('editView').hidden)) {
+        $('editView').hidden ? closeOverlays() : $('editCloseBtn').click();
+    }
+});
+
+// --- result page
+
+function setStatus(msg) {
+    $('status').textContent = msg;
+    $('status').hidden = !msg;
+}
+
+function showError(msg) {
+    $('errorBox').textContent = msg;
+    $('errorBox').hidden = !msg;
+}
+
+function hideResult() {
+    $('resultCard').hidden = true;
+    showError('');
+    setStatus('');
+}
+
+function showResultPage() {
+    setStatus('');
+    const result = last && last.result;
+    if (result) {
+        lastValue = result.text;
+        $('decodedText').textContent = result.text;
+        let fmt = FORMATS[result.kind] || result.kind;
+        if (result.kind === 'ean13' && result.text[0] === '0') {
+            fmt += ' (UPC-A ' + result.text.slice(1) + ')';
+        }
+        $('decodedFormat').textContent = 'Format: ' + fmt;
+        $('resultCard').hidden = false;
+        showError('');
+    } else {
+        $('resultCard').hidden = true;
+        showError(still ? 'No barcode found. Use "Adjust box" to draw a box around the barcode.' : '');
+    }
+    $('photoSection').hidden = !still;
+    $('retakeBtn').hidden = !fromCamera;
+    renderPhoto();
+    updateInternals();
+    if (result) $('resultCard').scrollIntoView({ block: 'nearest' });
+}
+
+function renderPhoto() {
+    if (!still) return;
+    const c = $('photo');
+    const k = Math.min(1, MAX_PHOTO_WIDTH / srcW);
+    c.width = Math.round(srcW * k);
+    c.height = Math.round(srcH * k);
+    const g = c.getContext('2d');
+    g.drawImage(still, 0, 0, c.width, c.height);
+    if ($('internalsCheck').checked && last && last.trace) drawTraceOverlay(g, last.trace, last.map, k);
+    const b = last && last.box;
+    if (b) {
+        g.lineWidth = 2;
+        g.strokeStyle = '#3b82f6';
+        g.strokeRect(b[0] * k, b[1] * k, (b[2] - b[0]) * k, (b[3] - b[1]) * k);
+    }
+}
+
+$('adjustBtn').addEventListener('click', () => {
+    openEditor();
+    setEditMsg('Drag a box around the barcode.');
+});
+$('retakeBtn').addEventListener('click', () => openCamera());
 
 $('copyBtn').addEventListener('click', async () => {
     if (!lastValue) return;
@@ -742,7 +912,7 @@ $('copyBtn').addEventListener('click', async () => {
 });
 
 $('internalsCheck').addEventListener('change', () => {
-    if (mode !== 'live') render();
+    renderPhoto();
     updateInternals();
 });
 
@@ -757,15 +927,15 @@ function pickAttempt(trace) {
     return pool.reduce((b, a) => (a.frac < b.frac ? a : b));
 }
 
-function drawTraceOverlay(tr, map, k) {
+function drawTraceOverlay(g, tr, map, k) {
     const toDisp = ([x, y]) => [(map.ox + x / map.s) * k, (map.oy + y / map.s) * k];
     const R2I = (u, v) => toDisp(BarcodeDecoder.rectToImage(tr, u, v));
     const line = (pts, color, width) => {
-        ctx.beginPath();
-        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.stroke();
+        g.beginPath();
+        pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        g.strokeStyle = color;
+        g.lineWidth = width;
+        g.stroke();
     };
     const W = tr.W, H = tr.H;
     const best = pickAttempt(tr);
@@ -890,7 +1060,7 @@ function updateInternals() {
         plotProfile($('zoomCanvas'), best, f.x0 - 5, f.x0 + 0.25 * (f.x1 - f.x0), 'zoom: left end');
         $('fitInfo').textContent =
             `${FORMATS[best.kind]} → ${best.text} | unexplained variance ${fmt(best.frac * 100, 1)}%, ` +
-            `confidence margin ${fmt(best.margin2, 0)} (need > 100) | ` +
+            `confidence margin ${fmt(best.margin2, 0)} (need > 128) | ` +
             `module ${fmt(best.modulePx, 2)} px, blur σ ${fmt(f.sigma, 2)} modules, ink spread ` +
             `${fmt(f.spread, 2)} modules, perspective ${fmt(f.persp, 3)} | bar angle ` +
             `${fmt(tr.angle * 180 / Math.PI, 1)}°, axis angle ${fmt(tr.axisAngle * 180 / Math.PI, 1)}°` +
@@ -915,9 +1085,9 @@ function updateInternals() {
     table.innerHTML = '<tr><th>band</th><th>dir</th><th>format</th><th>unexplained</th>' +
         '<th>margin</th><th>module px</th><th>accepted</th><th>decoded</th></tr>' + rows.join('');
     // decoded text may contain arbitrary characters: set it as text
-    [...table.querySelectorAll('tr')].slice(1).forEach((tr_, i) => {
+    [...table.querySelectorAll('tr')].slice(1).forEach((row, i) => {
         const t = tr.attempts[i].text;
-        tr_.lastChild.textContent = t === null ? '(no valid sequence)' : JSON.stringify(t).slice(1, -1);
+        row.lastChild.textContent = t === null ? '(no valid sequence)' : JSON.stringify(t).slice(1, -1);
     });
 }
 </script>
