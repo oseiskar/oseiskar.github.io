@@ -190,8 +190,9 @@ export default function Home() {
           image="img/vibe-coded-barcode-decoder.jpg"
           url="/vibe-coded/barcode-decoder/"
           description="
-            Upload an image and decode the barcode in it, optionally restricting the
-            search to a selected region of the image."/>
+            Decode EAN-13, EAN-8 and Code 128 barcodes from an image or the camera,
+            even blurry or low-resolution ones, by fitting a model of the barcode to the
+            pixels. Can visualize what the decoder saw."/>
         </div>
       </section>
     </main>
