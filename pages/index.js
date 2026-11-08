@@ -165,6 +165,15 @@ export default function Home() {
         </p>
         <div className="flex flex-wrap items-center justify-around xl:justify-between w-full">
         <GithubProject
+          name="OpenSCAD AI Workbench"
+          repo="oseiskar/openscad-ai-workbench"
+          image="img/vibe-coded-openscad-ai-workbench.jpg"
+          url="https://github.com/oseiskar/openscad-ai-workbench"
+          description="
+            AI CAD where the AI can edit both the model and the UI. A coding agent writes OpenSCAD
+            and renders the parts to a browser viewer over MCP, where you can inspect the 3D assembly,
+            click points, annotate screenshots and send feedback back to the agent."/>
+        <GithubProject
           name="3D Room Designer"
           image="img/vibe-coded-3d-interior-designer.jpg"
           url="/vibe-coded/3d-interior-designer/"
