@@ -427,7 +427,8 @@ tr.accepted td {
         <h1>Barcode Decoder</h1>
 
         <div class="subtitle">
-            Reads EAN-13 / UPC-A, EAN-8 and Code 128 barcodes. Take a photo or upload one,
+            Reads EAN-13 / UPC-A, EAN-8, UPC-E (with EAN-2 / EAN-5 add-ons), Code 128 /
+            GS1-128 and Code 93 barcodes. Take a photo or upload one,
             then drag a box around the barcode if it is not found automatically (bars roughly
             vertical). Works with blurry and low-resolution images. Everything runs locally
             in your browser.
@@ -439,6 +440,14 @@ tr.accepted td {
                 Upload image
                 <input type="file" id="fileInput" accept="image/*" hidden>
             </label>
+            <select id="kindSelect" aria-label="Barcode format">
+                <option value="">Any format</option>
+                <option value="ean13">EAN-13 / UPC-A</option>
+                <option value="ean8">EAN-8</option>
+                <option value="upce">UPC-E</option>
+                <option value="code128">Code 128 / GS1-128</option>
+                <option value="code93">Code 93</option>
+            </select>
             <label class="check">
                 <input type="checkbox" id="internalsCheck">
                 Show internals
@@ -537,7 +546,11 @@ tr.accepted td {
 const MAX_PHOTO_WIDTH = 1280;
 const MAX_DECODE_BOX_WIDTH = 1200; // downscale larger boxes before decoding
 const AUTO_TIME_LIMIT_MS = 2500;   // automatic whole-image attempt
-const FORMATS = { ean13: 'EAN-13', ean8: 'EAN-8', code128: 'Code 128' };
+const BOX_TIME_LIMIT_MS = 5000;    // user-drawn box
+const FORMATS = {
+    ean13: 'EAN-13', ean8: 'EAN-8', upce: 'UPC-E', code128: 'Code 128', 'gs1-128': 'GS1-128',
+    code93: 'Code 93', ean2: 'EAN-2 add-on', ean5: 'EAN-5 add-on',
+};
 
 const $ = id => document.getElementById(id);
 
@@ -584,8 +597,10 @@ function runDecode(source, b, timeLimitMs) {
     return new Promise(resolve => {
         const id = nextId++;
         pending.set(id, out => resolve(Object.assign(out, { map })));
+        const kind = $('kindSelect').value;
         worker.postMessage({
             id, gray: gray.data, width: cw, height: ch, bbox: rbox, timeLimitMs,
+            kinds: kind ? [kind] : undefined,
         }, [gray.data.buffer]);
     });
 }
@@ -598,7 +613,7 @@ async function decodeCurrent(auto) {
     const seq = ++decodeSeq;
     const b = box || [0, 0, srcW, srcH];
     const usedBox = box;
-    const out = await runDecode(still, b, auto ? AUTO_TIME_LIMIT_MS : 0);
+    const out = await runDecode(still, b, auto ? AUTO_TIME_LIMIT_MS : BOX_TIME_LIMIT_MS);
     if (seq !== decodeSeq) return; // a newer box was drawn meanwhile
     last = Object.assign(out, { box: usedBox });
     if (out.result) {
@@ -853,10 +868,17 @@ function showResultPage() {
     const result = last && last.result;
     if (result) {
         lastValue = result.text;
-        $('decodedText').textContent = result.text;
+        // FNC1 / group separators in Code 128 are invisible: show a symbol
+        $('decodedText').textContent = result.text.replace(/\x1d/g, '␝');
         let fmt = FORMATS[result.kind] || result.kind;
         if (result.kind === 'ean13' && result.text[0] === '0') {
             fmt += ' (UPC-A ' + result.text.slice(1) + ')';
+        }
+        if (result.kind === 'upce') {
+            fmt += ' (UPC-A ' + BarcodeDecoder.upceToUpca(result.text) + ')';
+        }
+        if (result.addon) {
+            fmt += ` + EAN-${result.addon.length} add-on ${result.addon}`;
         }
         $('decodedFormat').textContent = 'Format: ' + fmt;
         $('resultCard').hidden = false;
@@ -909,6 +931,20 @@ $('copyBtn').addEventListener('click', async () => {
     }
     $('copyBtn').textContent = 'Copied ✓';
     setTimeout(() => { $('copyBtn').textContent = 'Copy'; }, 1500);
+});
+
+// the format choice is remembered; changing it decodes the current photo again
+try {
+    const saved = localStorage.getItem('barcodeKind');
+    if (saved && [...$('kindSelect').options].some(o => o.value === saved)) $('kindSelect').value = saved;
+} catch { /* storage unavailable */ }
+$('kindSelect').addEventListener('change', () => {
+    try { localStorage.setItem('barcodeKind', $('kindSelect').value); } catch { /* ignore */ }
+    if (!still) return;
+    hideResult();
+    if ($('editView').hidden) setStatus('Looking for a barcode…');
+    else setEditMsg('Decoding…');
+    decodeCurrent(!box);
 });
 
 $('internalsCheck').addEventListener('change', () => {
