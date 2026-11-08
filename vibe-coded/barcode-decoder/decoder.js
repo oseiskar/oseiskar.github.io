@@ -1,6 +1,7 @@
 /*
  * Model-based 1D barcode decoder ("decode by synthesis"): EAN-13 / UPC-A,
- * EAN-8 and Code 128. Port of the Python prototype in
+ * EAN-8, UPC-E (+ EAN-2 / EAN-5 add-ons), Code 128 / GS1-128 and Code 93.
+ * Port of the Python prototype in
  * prototypes/barcode-decoder/decoder.py (see there for the design notes).
  *
  * Input: grayscale image {data: Float32Array (0..1), width, height} and a
@@ -31,6 +32,20 @@
   const EAN_G = EAN_R.map(p => p.split('').reverse().join(''));
   const EAN_PARITY = ['000000', '001011', '001101', '001110', '010011',
     '011001', '011100', '010101', '010110', '011010'];
+  const complement = p => p.split('').map(c => c === '0' ? '1' : '0').join('');
+
+  // UPC-E: parity of the 6 digits (1 = G) by check digit, for number system 0
+  // (number system 1 uses the complement)
+  const UPCE_PARITY = ['111000', '110100', '110010', '110001', '101100',
+    '100110', '100011', '101010', '101001', '100101'];
+  const UPCE_PARITY_TO_NS_CHECK = new Map();
+  UPCE_PARITY.forEach((p, c) => {
+    UPCE_PARITY_TO_NS_CHECK.set(parseInt(p, 2), [0, c]);
+    UPCE_PARITY_TO_NS_CHECK.set(parseInt(complement(p), 2), [1, c]);
+  });
+  // EAN-5 add-on: parity by checksum
+  const EAN5_PARITY = ['11000', '10100', '10010', '10001', '01100',
+    '00110', '00011', '01010', '01001', '00101'];
 
   const CODE128_WIDTHS = (
     '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 ' +
@@ -58,6 +73,7 @@
   const C128_STARTS = [103, 104, 105].map(v => CODE128_PATTERNS[v]);
   const C128_DATA = CODE128_PATTERNS.slice(0, 103);
   const C128_STOP_PATTERN = CODE128_PATTERNS[106];
+  const GS = '\x1d'; // FNC1 is represented as the ASCII group separator in decoded text
 
   function code128ValuesToText(values) {
     // values: start, data... (no checksum). Returns null if invalid.
@@ -73,7 +89,7 @@
         if (v < 100) out += String(v).padStart(2, '0');
         else if (v === 100) cur = 'B';
         else if (v === 101) cur = 'A';
-        else if (v === 102) { /* FNC1 */ }
+        else if (v === 102) out += GS; // FNC1
         else return null;
         continue;
       }
@@ -88,10 +104,89 @@
         if (cs === 'A') cur = 'B'; // in B: FNC4, ignored
       } else if (v === 101) {
         if (cs === 'B') cur = 'A'; // in A: FNC4, ignored
-      } else if (v === 96 || v === 97 || v === 102) {
-        // FNC3, FNC2, FNC1
+      } else if (v === 102) {
+        out += GS; // FNC1
+      } else if (v === 96 || v === 97) {
+        // FNC3, FNC2
       } else {
         return null;
+      }
+    }
+    return out;
+  }
+
+  // GS1-128: total length (AI + data) of the AIs with a predefined length, by
+  // the first two digits. Other AIs have variable length, terminated by FNC1
+  const GS1_FIXED = {
+    '00': 20, '01': 16, '02': 16, '03': 16, '04': 18, '11': 8, '12': 8, '13': 8, '14': 8,
+    '15': 8, '16': 8, '17': 8, '18': 8, '19': 8, '20': 4, '31': 10, '32': 10, '33': 10,
+    '34': 10, '35': 10, '36': 10, '41': 16,
+  };
+
+  function gs1AiLength(p) {
+    // number of digits in an AI, by its first two digits
+    if (['23', '24', '25', '40', '41', '42', '71'].includes(p)) return 3;
+    if (['31', '32', '33', '34', '35', '36', '39', '43'].includes(p) || '78'.includes(p[0])) return 4;
+    return 2;
+  }
+
+  function gs1ToText(raw) {
+    // GS1 element string (leading FNC1 removed) -> "(01)12345678901231(10)ABC" or null
+    const isDigits = s => /^[0-9]+$/.test(s);
+    let out = '', i = 0;
+    while (i < raw.length) {
+      const p = raw.slice(i, i + 2);
+      if (p.length < 2 || !isDigits(p)) return null;
+      const n = gs1AiLength(p);
+      const ai = raw.slice(i, i + n);
+      if (ai.length < n || !isDigits(ai)) return null;
+      let j;
+      if (p in GS1_FIXED) {
+        j = i + GS1_FIXED[p];
+        if (j > raw.length || raw.slice(i + n, j).includes(GS)) return null;
+      } else {
+        j = raw.indexOf(GS, i + n);
+        if (j < 0) j = raw.length;
+      }
+      out += '(' + ai + ')' + raw.slice(i + n, j);
+      i = j + (j < raw.length && raw[j] === GS ? 1 : 0);
+    }
+    return out || null;
+  }
+
+  // Code 93: 43 characters + 4 shift characters (43..46)
+  const CODE93_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%';
+  const CODE93_PATTERNS = (
+    '131112 111213 111312 111411 121113 121212 121311 111114 131211 141111 ' +
+    '211113 211212 211311 221112 221211 231111 112113 112212 112311 122112 ' +
+    '132111 111123 111222 111321 121122 131121 212112 212211 211122 211221 ' +
+    '221121 222111 112122 112221 122121 123111 121131 311112 311211 321111 ' +
+    '112131 113121 211131 121221 312111 311121 122211').split(' ').map(widthsToModules);
+  const CODE93_START = widthsToModules('111141');
+  const CODE93_STOP = CODE93_START + '1'; // termination bar
+
+  function code93ValuesToText(values) {
+    // data values (no checks) -> text with the full ASCII shifts decoded, or null
+    let out = '';
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v < 43) { out += CODE93_CHARS[v]; continue; }
+      const n = values[i + 1];
+      if (n === undefined || n < 10 || n > 35) return null;
+      i++;
+      const c = CODE93_CHARS[n], o = n - 10; // A = 0
+      if (v === 46) out += String.fromCharCode(97 + o); // (+): lower case
+      else if (v === 43) out += String.fromCharCode(1 + o); // ($): control
+      else if (v === 45) { // (/)
+        if (c <= 'O') out += String.fromCharCode(33 + o);
+        else if (c === 'Z') out += ':';
+        else return null;
+      } else { // (%)
+        if (c <= 'E') out += String.fromCharCode(27 + o);
+        else if (c <= 'J') out += String.fromCharCode(59 + o - 5);
+        else if (c <= 'O') out += String.fromCharCode(91 + o - 10);
+        else if (c <= 'T') out += String.fromCharCode(123 + o - 15);
+        else out += { U: '\0', V: '@', W: '`' }[c] || '\x7f';
       }
     }
     return out;
@@ -344,6 +439,23 @@
     return { slots, U: 67 };
   }
 
+  function upceLayout() {
+    const slots = [slot(0, ['101'], '00')];
+    for (let i = 0; i < 6; i++) slots.push(slot(3 + 7 * i, EAN_L.concat(EAN_G), '10'));
+    slots.push(slot(45, ['010101'], '10'));
+    return { slots, U: 51 };
+  }
+
+  function addonLayout(n) {
+    // EAN-2 / EAN-5 add-on: start 1011, digits separated by 01
+    const slots = [slot(0, ['1011'], '00')];
+    for (let i = 0; i < n; i++) {
+      if (i > 0) slots.push(slot(2 + 9 * i, ['01'], '10'));
+      slots.push(slot(4 + 9 * i, EAN_L.concat(EAN_G), '10'));
+    }
+    return { slots, U: 9 * n + 2 };
+  }
+
   function code128Layout(m) {
     // m = number of 11-module symbols (start + data + checksum)
     const slots = [slot(0, C128_STARTS, '01')];
@@ -352,13 +464,46 @@
     return { slots, U: 11 * m + 13 };
   }
 
-  const EAN_ENDS = {
-    ean13: [[slot(0, ['101'], '00'), slot(3, EAN_L.concat(EAN_G), '10')],
-      [slot(0, EAN_R, '01'), slot(7, ['101'], '00')]],
-    ean8: [[slot(0, ['101'], '00'), slot(3, EAN_L, '10')],
-      [slot(0, EAN_R, '01'), slot(7, ['101'], '00')]],
+  function code93Layout(m) {
+    // m = number of 9-module symbols (start + data + 2 checks)
+    const slots = [slot(0, [CODE93_START], '01')];
+    for (let i = 1; i < m; i++) slots.push(slot(9 * i, CODE93_PATTERNS, '01'));
+    slots.push(slot(9 * m, [CODE93_STOP], '00'));
+    return { slots, U: 9 * m + 10 };
+  }
+
+  // fixed-length symbologies: layout and start / stop patterns (+ the
+  // adjacent digit) with their widths
+  const FIXED = {
+    ean13: {
+      layout: ean13Layout, nl: 10, nr: 10,
+      ends: [[slot(0, ['101'], '00'), slot(3, EAN_L.concat(EAN_G), '10')],
+        [slot(0, EAN_R, '01'), slot(7, ['101'], '00')]],
+    },
+    ean8: {
+      layout: ean8Layout, nl: 10, nr: 10,
+      ends: [[slot(0, ['101'], '00'), slot(3, EAN_L, '10')],
+        [slot(0, EAN_R, '01'), slot(7, ['101'], '00')]],
+    },
+    upce: {
+      layout: upceLayout, nl: 10, nr: 13,
+      ends: [[slot(0, ['101'], '00'), slot(3, EAN_L.concat(EAN_G), '10')],
+        [slot(0, EAN_L.concat(EAN_G), '10'), slot(7, ['010101'], '10')]],
+    },
   };
-  const C128_ENDS = [[slot(0, C128_STARTS, '01')], [slot(0, [C128_STOP_PATTERN], '00')]];
+  // variable-length symbologies: symbol width n, start / stop patterns with
+  // their widths, minimum number of symbols
+  const VARIABLE = {
+    code128: {
+      layout: code128Layout, n: 11, nl: 11, nr: 13, mMin: 3,
+      ends: [[slot(0, C128_STARTS, '01')], [slot(0, [C128_STOP_PATTERN], '00')]],
+    },
+    code93: {
+      layout: code93Layout, n: 9, nl: 9, nr: 10, mMin: 4,
+      ends: [[slot(0, [CODE93_START], '01')], [slot(0, [CODE93_STOP], '00')]],
+    },
+  };
+  const KINDS = ['ean13', 'ean8', 'upce', 'code128', 'code93'];
 
   // -------------------------------------------------------------- templates
 
@@ -382,6 +527,16 @@
     if (res) return res;
     const L = (s.n + 1) * R, C = s.patterns.length;
     const T = new Float64Array(C * L), Stt = new Float64Array(C);
+    // bar edges are at integer module positions -/+ spread / 2, so a bar
+    // [a, b) contributes rise[k - R a] - fall[k - R b] (a, b integers) with
+    // rise[m] = Phi(((m + 0.5) / R - 0.5 + spread / 2) / sigma) and fall
+    // the same with -spread / 2. Tabulate m in [-M, M)
+    const M = (s.n + 6) * R;
+    const rise = new Float64Array(2 * M), fall = new Float64Array(2 * M);
+    for (let m = -M; m < M; m++) {
+      rise[m + M] = normCdf(((m + 0.5) / R - 0.5 + spread / 2) / sigma);
+      fall[m + M] = normCdf(((m + 0.5) / R - 0.5 - spread / 2) / sigma);
+    }
     for (let ci = 0; ci < C; ci++) {
       const str = s.ctx[0] + s.patterns[ci] + s.ctx[1];
       const t = new Float64Array(L);
@@ -390,14 +545,11 @@
         if (str[i] !== '1') { i++; continue; }
         let j = i;
         while (j < str.length && str[j] === '1') j++;
-        let a = i - 1 - spread / 2, b = j - 1 + spread / 2;
+        let a = i - 1, b = j - 1;
         // context runs: assume they continue beyond the window
         if (i === 0) a -= 2;
         if (j === str.length) b += 2;
-        for (let k = 0; k < L; k++) {
-          const u = -0.5 + (k + 0.5) / R;
-          t[k] += normCdf((u - a) / sigma) - normCdf((u - b) / sigma);
-        }
+        for (let k = 0; k < L; k++) t[k] += rise[k - R * a + M] - fall[k - R * b + M];
         i = j;
       }
       detrend(t);
@@ -473,6 +625,11 @@
     }
 
     fit(x0, x1, persp0, searchModules = 1.0) {
+      return this.refine(this.coarse(x0, x1, persp0, searchModules));
+    }
+
+    coarse(x0, x1, persp0, searchModules = 1.0) {
+      // returns {c, prm} of the best grid point
       const w0 = (x1 - x0) / this.U;
       // coarse grid over both ends and perspective. A perspective change dk
       // moves the middle of the code by ~U dk / 4 modules: step <= 0.5 module
@@ -494,7 +651,12 @@
           }
         }
       }
-      let { c, prm } = best;
+      return best;
+    }
+
+    refine({ c, prm }) {
+      const w0 = (prm.x1 - prm.x0) / this.U;
+      const kStep = 2.0 / this.U;
       // coordinate descent with shrinking steps.
       // End-to-end module width ratio is (1 + persp)^2, up to ~2.5x
       const lim = { sigma: [0.2, 1.2], spread: [-0.5, 0.5], persp: [-0.37, 0.6] };
@@ -557,8 +719,26 @@
 
   // ---------------------------------------------------------------- extent
 
+  function splitAddon(peaks, U) {
+    // With blur, an EAN-2 / EAN-5 add-on 7-12 modules right of the main code
+    // can merge into the same edge cluster. If the cluster has a gap that is
+    // too wide to be inside a code of U modules, and the part right of it is
+    // add-on sized, returns the extent of the main code. Else null.
+    let j = 0;
+    for (let i = 1; i < peaks.length - 1; i++) {
+      if (peaks[i + 1] - peaks[i] > peaks[j + 1] - peaks[j]) j = i;
+    }
+    if (j < 5) return null;
+    const w = (peaks[j] - peaks[0]) / U;
+    const right = peaks[peaks.length - 1] - peaks[j + 1];
+    if (peaks[j + 1] - peaks[j] >= 5.5 * w && right >= 12 * w && right <= 60 * w) {
+      return [peaks[0] + 0.5, peaks[j] + 0.5];
+    }
+    return null;
+  }
+
   function findExtent(d) {
-    // first & last edge of the main edge cluster (the barcode)
+    // first & last edge of the main edge cluster (the barcode), and its edges
     const s = boxSmooth(d, 2);
     const g = new Float64Array(s.length - 1);
     for (let i = 0; i < g.length; i++) g[i] = s[i + 1] - s[i];
@@ -590,7 +770,7 @@
     while (i0 <= i1 && g[best[i0]] < 0) i0++;
     while (i1 >= i0 && g[best[i1]] > 0) i1--;
     if (i1 - i0 + 1 < 6) return null;
-    return [best[i0] + 0.5, best[i1] + 0.5];
+    return { ext: [best[i0] + 0.5, best[i1] + 0.5], peaks: best.slice(i0, i1 + 1) };
   }
 
   function endWidth(d, e, slots, n, side, wLo, wHi) {
@@ -674,6 +854,148 @@
     const digits = (best.first !== null ? [best.first] : [])
       .concat(best.ch.map(c => c % 10), best.rch);
     return { text: digits.join(''), choices: [0].concat(best.ch, [0], best.rch, [0]) };
+  }
+
+  // checksum weight of UPC-A digit k (0-based, 11 data digits)
+  const upcaWeight = k => (k % 2 === 0 ? 3 : 1);
+
+  function upcePositions(d6) {
+    // UPC-A position of the UPC-E digits d1..d6 (null: not present), by d6
+    if (d6 <= 2) return [1, 2, 8, 9, 10, 3];
+    if (d6 === 3) return [1, 2, 3, 9, 10, null];
+    if (d6 === 4) return [1, 2, 3, 4, 10, null];
+    return [1, 2, 3, 4, 5, 10];
+  }
+
+  // DP over digit slots with state (parity bits, weighted digit sum mod
+  // `mod`): returns Map(par * mod + sum -> {c, ch})
+  function parityDp(slots, weights, mod) {
+    let states = new Map([[0, { c: 0, ch: [] }]]);
+    slots.forEach(({ sse }, j) => {
+      const ns = new Map();
+      for (const [key, { c, ch }] of states) {
+        const par = Math.floor(key / mod), s = key % mod;
+        for (let ci = 0; ci < sse.length; ci++) {
+          const d = ci % 10, g = Math.floor(ci / 10);
+          const nk = ((par << 1) | g) * mod + (s + weights[j] * d) % mod;
+          const v = c + sse[ci];
+          const old = ns.get(nk);
+          if (!old || v < old.c) ns.set(nk, { c: v, ch: ch.concat([ci]) });
+        }
+      }
+      states = ns;
+    });
+    return states;
+  }
+
+  function decodeUpce(sc) {
+    // The parity pattern of the 6 digits encodes the number system and the
+    // check digit of the expanded UPC-A. For every value of the last digit
+    // (which decides the expansion), DP over the other digits.
+    let best = null;
+    for (let d6 = 0; d6 < 10; d6++) {
+      const pos = upcePositions(d6);
+      const states = parityDp(sc.slice(1, 6), pos.slice(0, 5).map(upcaWeight), 10);
+      const last = sc[6].sse;
+      for (const [key, { c, ch }] of states) {
+        const par = Math.floor(key / 10), s = key % 10;
+        for (const g of [0, 1]) {
+          const nsCheck = UPCE_PARITY_TO_NS_CHECK.get((par << 1) | g);
+          if (!nsCheck) continue;
+          const [numSys, check] = nsCheck;
+          const tot = 3 * numSys + s + (pos[5] !== null ? upcaWeight(pos[5]) * d6 : 0);
+          if ((10 - tot % 10) % 10 !== check) continue;
+          const v = c + last[g * 10 + d6];
+          if (best === null || v < best.c) best = { c: v, numSys, check, ch: ch.concat([g * 10 + d6]) };
+        }
+      }
+    }
+    if (best === null) return null;
+    return {
+      text: String(best.numSys) + best.ch.map(c => c % 10).join('') + best.check,
+      choices: [0].concat(best.ch, [0]),
+    };
+  }
+
+  function decodeAddon(sc, n) {
+    // EAN-2 / EAN-5 add-on: the parity pattern encodes a checksum
+    // (EAN-2: value mod 4; EAN-5: (3, 9, 3, 9, 3) weighted sum mod 10)
+    const digitSlots = Array.from({ length: n }, (_, i) => sc[1 + 2 * i]);
+    const [weights, mod] = n === 2 ? [[2, 1], 4] : [[3, 9, 3, 9, 3], 10];
+    let best = null;
+    for (const [key, { c, ch }] of parityDp(digitSlots, weights, mod)) {
+      const par = Math.floor(key / mod), s = key % mod;
+      const want = n === 2 ? s : parseInt(EAN5_PARITY[s], 2);
+      if (par === want && (best === null || c < best.c)) best = { c, ch };
+    }
+    if (best === null) return null;
+    const choices = [0];
+    best.ch.forEach((c, i) => { if (i > 0) choices.push(0); choices.push(c); });
+    return { text: best.ch.map(c => c % 10).join(''), choices };
+  }
+
+  function decodeCode93(sc) {
+    // DP over the two check values (state: C sum, K sum mod 47)
+    const m = sc.length - 1, n = m - 3; // n data symbols
+    let cost = new Float64Array(47 * 47).fill(Infinity);
+    cost[0] = 0;
+    const back = [];
+    for (let i = 0; i < n; i++) {
+      const wc = (n - 1 - i) % 20 + 1, wk = (n - i) % 15 + 1;
+      const c = sc[1 + i].sse;
+      const nw = new Float64Array(47 * 47).fill(Infinity);
+      const bv = new Int32Array(47 * 47);
+      for (let a = 0; a < 47; a++) {
+        for (let b = 0; b < 47; b++) {
+          const c0 = cost[a * 47 + b];
+          if (c0 === Infinity) continue;
+          for (let v = 0; v < 47; v++) {
+            const k = ((a + wc * v) % 47) * 47 + (b + wk * v) % 47;
+            const cand = c0 + c[v];
+            if (cand < nw[k]) { nw[k] = cand; bv[k] = v; }
+          }
+        }
+      }
+      back.push({ bv, wc, wk });
+      cost = nw;
+    }
+    // the C check symbol must equal the C sum; K includes C with weight 1
+    const cc = sc[m - 2].sse, ck = sc[m - 1].sse;
+    let best = Infinity, ba = -1, bb = -1;
+    for (let a = 0; a < 47; a++) {
+      for (let b = 0; b < 47; b++) {
+        const t = cost[a * 47 + b] + cc[a] + ck[(a + b) % 47];
+        if (t < best) { best = t; ba = a; bb = b; }
+      }
+    }
+    if (ba < 0) return null;
+    const vals = [];
+    let a = ba, b = bb;
+    for (let i = back.length - 1; i >= 0; i--) {
+      const { bv, wc, wk } = back[i];
+      const v = bv[a * 47 + b];
+      vals.push(v);
+      a = ((a - wc * v) % 47 + 47) % 47;
+      b = ((b - wk * v) % 47 + 47) % 47;
+    }
+    vals.reverse();
+    const text = code93ValuesToText(vals);
+    if (text === null) return null;
+    return { text, choices: [0].concat(vals, [ba, (ba + bb) % 47, 0]) };
+  }
+
+  function decodeKind(kind, sc) {
+    if (kind === 'code128') {
+      const dec = decodeCode128(sc);
+      if (dec && dec.text[0] === GS) {
+        const hri = gs1ToText(dec.text.slice(1));
+        if (hri !== null) return Object.assign(dec, { text: hri, kind: 'gs1-128' });
+      }
+      return dec && Object.assign(dec, { kind });
+    }
+    const dec = kind === 'code93' ? decodeCode93(sc) : kind === 'upce' ? decodeUpce(sc) :
+      decodeEan(sc, kind);
+    return dec && Object.assign(dec, { kind });
   }
 
   function decodeCode128(sc) {
@@ -774,32 +1096,36 @@
   function tryKind(d, kind, e0, e1) {
     const span = e1 - e0;
     let wl, wr, layouts;
-    if (kind === 'code128') {
+    if (kind in VARIABLE) {
+      const v = VARIABLE[kind];
+      const uMin = v.layout(v.mMin).U;
       // local module widths at both ends: under a 1D homography,
       // sqrt(w_left * w_right) = span / U exactly -> number of symbols
-      wl = endWidth(d, e0, C128_ENDS[0], 11, 'left', 0.7, span / 46);
-      wr = endWidth(d, e1, C128_ENDS[1], 13, 'right', 0.7, span / 46);
-      const m0 = Math.round((span / Math.sqrt(wl * wr) - 13) / 11);
-      layouts = [m0, m0 - 1, m0 + 1].filter(m => m >= 3).map(code128Layout);
+      wl = endWidth(d, e0, v.ends[0], v.nl, 'left', 0.7, span / uMin);
+      wr = endWidth(d, e1, v.ends[1], v.nr, 'right', 0.7, span / uMin);
+      const m0 = Math.round((span / Math.sqrt(wl * wr) - v.nr) / v.n);
+      layouts = [m0, m0 - 1, m0 + 1].filter(m => m >= v.mMin).map(v.layout);
     } else {
-      const layout = kind === 'ean13' ? ean13Layout() : ean8Layout();
+      const f = FIXED[kind];
+      const layout = f.layout();
       const w = span / layout.U;
-      wl = endWidth(d, e0, EAN_ENDS[kind][0], 10, 'left', 0.75 * w, 1.33 * w);
-      wr = endWidth(d, e1, EAN_ENDS[kind][1], 10, 'right', 0.75 * w, 1.33 * w);
+      wl = endWidth(d, e0, f.ends[0], f.nl, 'left', 0.75 * w, 1.33 * w);
+      wr = endWidth(d, e1, f.ends[1], f.nr, 'right', 0.75 * w, 1.33 * w);
       layouts = [layout];
     }
     // local widths at the ends are (1 + k) w and w / (1 + k)
     const persp0 = clamp(Math.sqrt(wl / wr) - 1, -0.35, 0.55);
-    // if the symbol count is ambiguous, keep the layout that fits best
+    // if the symbol count is ambiguous, refine the layout that fits best on the grid
     let best = null;
     for (const { slots, U } of layouts) {
       const model = new Model(d, slots, U);
-      const fit = model.fit(e0, e1, persp0);
-      if (best === null || fit.cost < best.fit.cost) best = { fit, model, U };
+      const coarse = model.coarse(e0, e1, persp0);
+      if (best === null || coarse.c < best.coarse.c) best = { coarse, model, U };
     }
-    const { fit, model, U } = best;
+    const { model, U } = best;
+    const fit = model.refine(best.coarse);
     const { sc, shifts } = model.alignedSlotCosts(fit);
-    const dec = kind === 'code128' ? decodeCode128(sc) : decodeEan(sc, kind);
+    const dec = decodeKind(kind, sc);
     const att = {
       kind, e0, e1, wLeft: wl, wRight: wr, U, fit, shifts,
       modulePx: (fit.x1 - fit.x0) / U, text: null, accepted: false,
@@ -810,6 +1136,52 @@
       att.model = model;
     }
     return att;
+  }
+
+  function findAddon(d, x1, w) {
+    // EAN-2 / EAN-5 add-on right of a main code ending at x1 (module width
+    // w): the edge cluster starting 7-12 modules after it. Returns attempts.
+    const s = boxSmooth(d, 2);
+    const g = new Float64Array(s.length - 1);
+    for (let i = 0; i < g.length; i++) g[i] = s[i + 1] - s[i];
+    const a = g.map(Math.abs);
+    const lo = Math.floor(x1 + 4 * w), hi = Math.min(Math.floor(x1 + 15 * w), a.length - 2);
+    if (hi <= lo) return [];
+    const thr = 0.2 * percentile(a, 99);
+    const peaks = [];
+    for (let i = lo; i < a.length - 1; i++) {
+      if (a[i] > thr && a[i] >= a[i - 1] && a[i] >= a[i + 1]) peaks.push(i);
+    }
+    if (!peaks.length || peaks[0] > hi || g[peaks[0]] < 0) return [];
+    const cl = [peaks[0]];
+    for (const p of peaks.slice(1)) {
+      if (p - cl[cl.length - 1] > 7 * w) break; // elements are <= 4 modules, but blur can hide edges
+      cl.push(p);
+    }
+    while (cl.length && g[cl[cl.length - 1]] > 0) cl.pop();
+    if (cl.length < 6) return [];
+    const e0 = cl[0] + 0.5, e1 = cl[cl.length - 1] + 0.5;
+    const out = [];
+    for (const n of [2, 5]) {
+      const { slots, U } = addonLayout(n);
+      const r = (e1 - e0) / (U * w);
+      if (!(r > 0.75 && r < 1.33)) continue;
+      const model = new Model(d, slots, U);
+      const fit = model.fit(e0, e1, 0.0);
+      const { sc, shifts } = model.alignedSlotCosts(fit);
+      const dec = decodeAddon(sc, n);
+      const att = {
+        kind: 'ean' + n, e0, e1, U, fit, shifts, modulePx: (fit.x1 - fit.x0) / U,
+        text: null, accepted: false,
+      };
+      if (dec !== null) {
+        Object.assign(att, dec, evaluate(sc, dec.choices, slots.map(s => (s.n + 1) * R)));
+        att.accepted = accept(att);
+        att.model = model;
+      }
+      out.push(att);
+    }
+    return out;
   }
 
   // thresholds calibrated with calibrate.py / analyze_calib.py on synthetic data
@@ -824,13 +1196,34 @@
     return accept(a) && a.frac < 0.07 && a.margin2 > 300;
   }
 
+  // early give-up: after the first GATE_BANDS bands, only symbologies with
+  // some decode whose confidence margin reached GATE_MARGIN are tried further.
+  // Fit cost does not work for this: random bars fit as well as barcodes.
+  // Calibrated on synthetic data: the true symbology has a median margin
+  // ~1300, wrong ones and non-barcodes < 35 (95th percentile)
+  const GATE_BANDS = 2, GATE_MARGIN = 40;
+
+  function bestVote(votes) {
+    // rank by number of supporting profiles, then by fit quality
+    let bestKey = null, bestScore = null;
+    for (const [key, as] of votes) {
+      const score = [as.length, -Math.min(...as.map(a => a.frac))];
+      if (bestScore === null || score[0] > bestScore[0] ||
+        (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+        bestKey = key; bestScore = score;
+      }
+    }
+    return votes.get(bestKey);
+  }
+
   /*
    * img: {data: Float32Array (0..1 gray), width, height}, bbox: [x0, y0, x1, y1]
-   * Returns {kind, text, votes} or null. With opts.trace: {result, trace}.
+   * Returns {kind, text, votes[, addon]} or null. With opts.trace: {result, trace}.
+   * opts.kinds: symbologies to try (default KINDS; Code 128 includes GS1-128).
    * opts.timeLimitMs: give up (after the current attempt) when exceeded.
    */
   function decode(img, bbox, opts = {}) {
-    const kinds = opts.kinds || ['ean13', 'ean8', 'code128'];
+    const kinds = opts.kinds || KINDS;
     const deadline = opts.timeLimitMs ? Date.now() + opts.timeLimitMs : Infinity;
     templateCache = new Map();
     bbox = [
@@ -844,57 +1237,93 @@
     }
     const { profiles, info } = getProfiles(img, bbox);
     const trace = Object.assign({ bbox }, info, { attempts: [] });
+    const oriented = (pi, direction) =>
+      direction > 0 ? profiles[pi] : Float64Array.from(profiles[pi]).reverse();
+    const timeUp = () => {
+      if (Date.now() <= deadline) return false;
+      trace.timedOut = true;
+      return true;
+    };
+    const record = (a, d, pi, direction) => {
+      a.band = pi;
+      a.direction = direction;
+      if (opts.trace) {
+        if (a.model) {
+          a.curve = fittedCurve(a.model, a.fit, a.choices, a.shifts);
+          a.moduleEdges = Array.from({ length: a.U + 1 }, (_, u) => a.model.gridX(a.fit, u));
+        }
+        a.profile = d;
+      }
+      delete a.model;
+      trace.attempts.push(a);
+    };
+    const vote = (votes, a) => {
+      // true when the decode is settled
+      if (!a.accepted) return false;
+      const key = a.kind + ':' + a.text;
+      if (!votes.has(key)) votes.set(key, []);
+      votes.get(key).push(a);
+      return !opts.exhaustive && (strong(a) || votes.get(key).length >= 2);
+    };
+
     const votes = new Map();
+    let active = kinds.slice();
+    const bestMargin = {};
     let done = false;
     for (let pi = 0; pi < profiles.length && !done; pi++) {
+      if (pi === GATE_BANDS && !opts.exhaustive) {
+        // give up on symbologies without any promising decode so far
+        active = active.filter(k => (bestMargin[k] || 0) >= GATE_MARGIN);
+        if (!active.length) {
+          trace.gaveUp = true;
+          break;
+        }
+      }
       for (const direction of [1, -1]) {
         if (done) break;
-        const d = direction > 0 ? profiles[pi] : Float64Array.from(profiles[pi]).reverse();
-        const ext = findExtent(d);
-        if (ext === null) continue;
-        for (const kind of kinds) {
-          const a = tryKind(d, kind, ext[0], ext[1]);
-          a.band = pi;
-          a.direction = direction;
-          if (opts.trace) {
-            if (a.model) {
-              a.curve = fittedCurve(a.model, a.fit, a.choices, a.shifts);
-              a.moduleEdges = Array.from({ length: a.U + 1 }, (_, u) => a.model.gridX(a.fit, u));
-            }
-            a.profile = d;
+        const d = oriented(pi, direction);
+        const found = findExtent(d);
+        if (found === null) continue;
+        for (const kind of active) {
+          const exts = [found.ext];
+          if (kind === 'ean13') {
+            // fallback: the main code merged with an add-on. (Not for UPC-E:
+            // the left half of an EAN-13 looks like a UPC-E)
+            const split = splitAddon(found.peaks, 95);
+            if (split) exts.push(split);
           }
-          delete a.model;
-          trace.attempts.push(a);
-          if (a.accepted) {
-            const key = a.kind + ':' + a.text;
-            if (!votes.has(key)) votes.set(key, []);
-            votes.get(key).push(a);
-            if (!opts.exhaustive && (strong(a) || votes.get(key).length >= 2)) {
-              done = true;
-              break;
-            }
+          for (const ext of exts) {
+            const a = tryKind(d, kind, ext[0], ext[1]);
+            if (a.text !== null) bestMargin[kind] = Math.max(bestMargin[kind] || 0, a.margin2);
+            record(a, d, pi, direction);
+            if (vote(votes, a) || timeUp()) done = true;
+            if (done || a.accepted) break;
           }
-          if (Date.now() > deadline) {
-            trace.timedOut = true;
-            done = true;
-            break;
-          }
+          if (done) break;
         }
       }
     }
     let result = null;
     if (votes.size) {
-      // rank by number of supporting profiles, then by fit quality
-      let bestKey = null, bestScore = null;
-      for (const [key, as] of votes) {
-        const score = [as.length, -Math.min(...as.map(a => a.frac))];
-        if (bestScore === null || score[0] > bestScore[0] ||
-          (score[0] === bestScore[0] && score[1] > bestScore[1])) {
-          bestKey = key; bestScore = score;
+      const as = bestVote(votes), a = as[0];
+      result = { kind: a.kind, text: a.text, votes: as.length };
+      if (a.kind === 'ean13' || a.kind === 'upce') {
+        // EAN-2 / EAN-5 add-on after the main code. The add-on checksums are
+        // weak (EAN-2: 2 bits), so 2 agreeing bands are required
+        const f = a.fit;
+        const w = (f.x1 - f.x0) / ((1 + f.persp) * a.U); // module width at the right end
+        const addonVotes = new Map();
+        for (let pi = 0; pi < profiles.length && !result.addon && !timeUp(); pi++) {
+          const d = oriented(pi, a.direction);
+          for (const att of findAddon(d, f.x1, w)) {
+            record(att, d, pi, a.direction);
+            if (!att.accepted) continue;
+            const n = (addonVotes.get(att.text) || 0) + 1;
+            addonVotes.set(att.text, n);
+            if (n >= 2) result.addon = att.text;
+          }
         }
       }
-      const a = votes.get(bestKey)[0];
-      result = { kind: a.kind, text: a.text, votes: votes.get(bestKey).length };
     }
     if (opts.trace) {
       trace.result = result;
@@ -912,7 +1341,17 @@
     return { data, width, height };
   }
 
-  const api = { decode, toGray, rectToImage, BANDS };
+  function upceToUpca(code) {
+    // 8-digit UPC-E -> the equivalent 12-digit UPC-A
+    const d = code.split('').map(Number);
+    const [d1, d2, d3, d4, d5, d6] = d.slice(1, 7);
+    const body = d6 <= 2 ? [d1, d2, d6, 0, 0, 0, 0, d3, d4, d5] :
+      d6 === 3 ? [d1, d2, d3, 0, 0, 0, 0, 0, d4, d5] :
+        d6 === 4 ? [d1, d2, d3, d4, 0, 0, 0, 0, 0, d5] : [d1, d2, d3, d4, d5, 0, 0, 0, 0, d6];
+    return [d[0]].concat(body, [d[7]]).join('');
+  }
+
+  const api = { decode, toGray, rectToImage, upceToUpca, BANDS, KINDS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else globalThis.BarcodeDecoder = api;
 })();
