@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>STL Viewer with Ambient Occlusion</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/vibe-coded/stl-viewer/vendor/tailwindcss.js"></script>
     <style>
         body {
             margin: 0;
@@ -45,9 +45,23 @@
             backdrop-filter: blur(5px);
         }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Inter (SIL OFL 1.1), self-hosted from vendor/inter, see vendor/inter/LICENSE -->
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url(/vibe-coded/stl-viewer/vendor/inter/inter-latin-400-normal.woff2) format('woff2');
+        }
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+            src: url(/vibe-coded/stl-viewer/vendor/inter/inter-latin-700-normal.woff2) format('woff2');
+        }
+    </style>
 </head>
 <body>
     <!-- Container for the Three.js renderer -->
@@ -62,12 +76,13 @@
     </div>
 
     <!-- Three.js and related libraries -->
-    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <!-- vendor/ is downloaded at build time by scripts/fetch-cdn-assets.sh -->
+    <script async src="/vibe-coded/stl-viewer/vendor/es-module-shims.js"></script>
     <script type="importmap">
     {
         "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+            "three": "/vibe-coded/stl-viewer/vendor/three/build/three.module.js",
+            "three/addons/": "/vibe-coded/stl-viewer/vendor/three/examples/jsm/"
         }
     }
     </script>
