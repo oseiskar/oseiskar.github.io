@@ -1,7 +1,10 @@
 {
   "private": true,
   "scripts": {
+    "fetch-cdn-assets": "bash scripts/fetch-cdn-assets.sh",
+    "predev": "npm run fetch-cdn-assets",
     "dev": "next dev",
+    "prebuild": "npm run fetch-cdn-assets",
     "build": "next build",
     "start": "next start"
   },

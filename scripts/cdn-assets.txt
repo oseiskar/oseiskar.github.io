@@ -1,0 +1,40 @@
+# Third-party assets (JS, CSS, fonts, ...) downloaded from CDNs at build time by
+# fetch-cdn-assets.sh. Not committed to master; they end up in the gh-pages
+# branch via the build output. Put them in a vendor/ directory (gitignored).
+#
+# Format: <destination path relative to public/>  <URL>
+# Checksums are pinned in cdn-assets.sha256
+
+# --- Vibe-coded STL viewer
+vibe-coded/stl-viewer/vendor/tailwindcss.js                                       https://cdn.tailwindcss.com/3.4.17
+vibe-coded/stl-viewer/vendor/tailwindcss.LICENSE                                  https://cdn.jsdelivr.net/npm/tailwindcss@3.4.17/LICENSE
+vibe-coded/stl-viewer/vendor/es-module-shims.js                                   https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js
+vibe-coded/stl-viewer/vendor/es-module-shims.LICENSE                              https://unpkg.com/es-module-shims@1.8.0/LICENSE
+vibe-coded/stl-viewer/vendor/inter/inter-latin-400-normal.woff2                   https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-400-normal.woff2
+vibe-coded/stl-viewer/vendor/inter/inter-latin-700-normal.woff2                   https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/files/inter-latin-700-normal.woff2
+vibe-coded/stl-viewer/vendor/inter/LICENSE                                        https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.0/LICENSE
+vibe-coded/stl-viewer/vendor/three/LICENSE                                        https://cdn.jsdelivr.net/npm/three@0.166.1/LICENSE
+vibe-coded/stl-viewer/vendor/three/build/three.module.js                          https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/controls/OrbitControls.js         https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/loaders/STLLoader.js              https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/STLLoader.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/EffectComposer.js  https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/EffectComposer.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/MaskPass.js        https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/MaskPass.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/Pass.js            https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/Pass.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/RenderPass.js      https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/RenderPass.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/SAOPass.js         https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/SAOPass.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/postprocessing/ShaderPass.js      https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/postprocessing/ShaderPass.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/shaders/CopyShader.js             https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/shaders/CopyShader.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/shaders/DepthLimitedBlurShader.js https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/shaders/DepthLimitedBlurShader.js
+vibe-coded/stl-viewer/vendor/three/examples/jsm/shaders/SAOShader.js              https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/shaders/SAOShader.js
+
+# --- Vibe-coded heading calculator
+vibe-coded/heading-calculator/vendor/tailwindcss.js                               https://cdn.tailwindcss.com/3.4.17
+vibe-coded/heading-calculator/vendor/tailwindcss.LICENSE                          https://cdn.jsdelivr.net/npm/tailwindcss@3.4.17/LICENSE
+vibe-coded/heading-calculator/vendor/leaflet/LICENSE                              https://unpkg.com/leaflet@1.9.4/LICENSE
+vibe-coded/heading-calculator/vendor/leaflet/leaflet.js                           https://unpkg.com/leaflet@1.9.4/dist/leaflet.js
+vibe-coded/heading-calculator/vendor/leaflet/leaflet.css                          https://unpkg.com/leaflet@1.9.4/dist/leaflet.css
+vibe-coded/heading-calculator/vendor/leaflet/images/layers.png                    https://unpkg.com/leaflet@1.9.4/dist/images/layers.png
+vibe-coded/heading-calculator/vendor/leaflet/images/layers-2x.png                 https://unpkg.com/leaflet@1.9.4/dist/images/layers-2x.png
+vibe-coded/heading-calculator/vendor/leaflet/images/marker-icon.png               https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png
+vibe-coded/heading-calculator/vendor/leaflet/images/marker-icon-2x.png            https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png
+vibe-coded/heading-calculator/vendor/leaflet/images/marker-shadow.png             https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png

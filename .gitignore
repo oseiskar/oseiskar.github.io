@@ -2,6 +2,9 @@ _site
 .sass-cache
 original_images/
 
+# third-party assets downloaded at build time, see scripts/fetch-cdn-assets.sh
+/public/**/vendor/
+
 # --- next JS template
 # dependencies
 /node_modules
